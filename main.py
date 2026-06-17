@@ -190,7 +190,7 @@ async def on_reaction_add(reaction, user):
 
     toDelete = []
     for key in pendingChecksDict.keys():
-        if reaction.message.id == pending:
+        if reaction.message.id == key:
             if reaction.emoji == "👍":
                 await reaction.message.channel.send("Added image to banned list!") 
 
