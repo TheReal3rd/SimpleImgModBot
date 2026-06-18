@@ -3,12 +3,16 @@ import hashlib
 import imagehash
 import json
 import os
+import random
+import logging
 
 from pathlib import Path
 from PIL import Image
 from io import BytesIO
+from discord import app_commands
 from discord.ext import commands, tasks
 from datetime import datetime, timedelta
+from collections import deque
 
 if __name__ != "__main__":
     quit()
@@ -34,7 +38,7 @@ def calcImageHash(imageBytes: bytes):
     phash = str(imagehash.phash(img))
     return (sha, phash)
 
-def loadImageFolder(folderPath, bannedDict):
+def loadImageFolder(folderPath, bannedDict):#TODO possible filter none image files from being processed.
     for filename in os.listdir(folderPath):
         filePath = os.path.join(folderPath, filename)
 
@@ -52,36 +56,68 @@ def loadImageFolder(folderPath, bannedDict):
                 "phash" : phash
             }
 
-            #os.remove(filePath)
-            print(f"Image Folder deleted {filePath}")
+            if not configDict["Debug"]:#To prevent images being deleted and lost while in development.
+                os.remove(filePath)
+                logger.warning(f"Image deleted {filePath}")
         except Exception as e:
-            print(f"Failed to process image: {filename} | {e}")
+            logger.error(f"Failed to process image: {filename} | {e}")
+
+def getFiles(folderPath, endWithFilter):
+    result = []
+    for filename in os.listdir(folderPath):
+        filePath = os.path.join(folderPath, filename)
+
+        if not os.path.isfile(filePath):
+            continue
+             
+        if not filePath.endswith(endWithFilter):
+            continue
+   
+        result.append(filePath)
+
+    return result
 
 def hasDaysPassed(startTime, days=1):
     return datetime.utcnow() >= startTime + timedelta(days=days)
 
+def fetchLogs():
+    result = []
+    for record in logBuffer:
+        result.append(f"{record.created} | {record.getMessage()}")
+    return result
+
+#Logging
+logBuffer = deque(maxlen=500)
+
+class MemoryHandler(logging.Handler):
+    def emit(self, record):
+        logBuffer.append(record)
+
+logger = logging.getLogger("ClankerMod")
+logger.setLevel(logging.INFO)
+
+formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+consoleHandler = logging.StreamHandler()
+consoleHandler.setFormatter(formatter)
+
+fileHandler = logging.FileHandler("bot.log", encoding="utf-8")
+fileHandler.setFormatter(formatter)
+
+memoryHandler = MemoryHandler()
+
+logger.addHandler(fileHandler)
+logger.addHandler(consoleHandler)
+logger.addHandler(memoryHandler)
+
 #Vars
-
-intents = discord.Intents.default()
-intents.message_content = True
-intents.members = True
-intents.reactions = True
-intents.messages = True 
-
-client = discord.Client(intents=intents)
-
-#Banned image load and hash.
-bannedImageDict = {}
-bannedImageDict = readJson("bannedList.json", {})
-loadImageFolder("images", bannedImageDict)
-writeJson("bannedList.json", bannedImageDict)
 
 #Config const's and load.
 DEFAULT_CONFIG = {
     "ServerID" : "",
     "ChannelID" : "",
     "Token" : "",
-    "Phash_Threshold" : 5
+    "Phash_Threshold" : 5,
+    "Debug" : True,
 }
 # Phash_Threshold
 #0 = identical perceptually
@@ -93,19 +129,46 @@ configDict = {}
 configDict = readJson("config.json", DEFAULT_CONFIG)
 writeJson("config.json", configDict)
 
+intents = discord.Intents.default()
+intents.message_content = True
+intents.members = True
+intents.reactions = True
+intents.messages = True 
+
+client = commands.Bot(command_prefix = "!" ,intents=intents)
+
+#Banned image load and hash.
+bannedImageDict = {}
+bannedImageDict = readJson("bannedList.json", {})
+loadImageFolder("images", bannedImageDict)
+writeJson("bannedList.json", bannedImageDict)
+
 # working
 pendingChecksDict = {}
 
 #General Const's
 SERVER_ID = configDict["ServerID"]
 CHANNEL_ID = configDict["ChannelID"]
+MSG_LEN_LIMIT = 2000
+EMBED_LEN_LIMIT = 4095
 
 @client.event
 async def on_ready():
-    print(f'Logged in as {client.user}')
+    commandFiles = getFiles("commands", "py")
+    for file in commandFiles:
+        with open(file, "r") as f:
+            code = f.read()
+            exec(code)
+            logger.info(f"Command loaded: {file}")
+
+
+    guild = discord.Object(id=SERVER_ID)
+    client.tree.copy_global_to(guild=guild)
+    await client.tree.sync(guild=guild)
+
+    logger.info(f'Logged in as {client.user}')
     if not update_loop.is_running():
         update_loop.start()
-
 
 async def sendMessage(serverID, channelID, message):
     guild = client.get_guild(serverID)
@@ -123,20 +186,16 @@ async def timeoutUser(user):
     try:
         await user.timeout(
             timedelta(days=28),
-            reason = "ClankerMod - Spam / scam images or banned images posting."
+            reason = "ClankerMod - Spam / Scam images or banned images posting."
         )
-        print(f"User as been timedout for 28 days. User: {user.name}")
+        logger.info(f"User as been timedout for 28 days. User: {user.name}")
 
     except discord.Forbidden:
-        print("Missing required permissions.")
+        logger.error("Missing required permissions.")
 
 @client.event
 async def on_message(message):
     if message.author == client.user:
-        return
-    
-    if message.content.startswith('$hello'):
-        await message.channel.send(f"Hello! {message.author.name}")
         return
 
     for attachment in message.attachments:
@@ -145,7 +204,7 @@ async def on_message(message):
             
             imageSHA256, imagePerceptual = calcImageHash(imageBytes)
 
-            print(f"Image posted: {message.channel} | SHA256: {imageSHA256} | Perceptual: {imagePerceptual}")
+            logger.info(f"Image posted: {message.channel} | sha256: {imageSHA256} | phash: {imagePerceptual}")
             if len(bannedImageDict.keys()) != 0:
                 for bannedImage in bannedImageDict.keys():
                     dataDict = bannedImageDict[bannedImage]
@@ -156,11 +215,11 @@ async def on_message(message):
                     perceptualDist = imagehash.hex_to_hash(imagePerceptual) - perceptual <= configDict["Phash_Threshold"]
 
                     if matching256 or perceptualDist:
-                        print(f"Image matching with banned list of SHA256: {imageSHA256} Perceptual: {imagePerceptual}")
+                        logger.info(f"Image matching with banned list of sha256: {imageSHA256} phash: {imagePerceptual}")
 
                         msg = f"""
                         Image matching in banned list was posted in {message.channel.name} by {message.author.name} 
-                        \n\nSHA256: {imageSHA256}\nPerceptual: {imagePerceptual}
+                        \n\nsha256: {imageSHA256}\nphash: {imagePerceptual}
                         """
                         await sendMessage(SERVER_ID, CHANNEL_ID, msg)
 
@@ -171,7 +230,7 @@ async def on_message(message):
             msg = f"""
             Image has been posted in {message.channel.name} by {message.author.name} react with :thumbsup: to blacklist. 
             \n[Jump to message](https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id})
-            \nSHA256: {imageSHA256}\nPerceptual: {imagePerceptual}
+            \nsha256: {imageSHA256}\nphash: {imagePerceptual}
             """ 
             msgID = await sendMessage(SERVER_ID, CHANNEL_ID, msg)
 
