@@ -263,6 +263,7 @@ async def on_message(message):
             pendingChecksDict[msgID] = {
                 "sha256" : imageSHA256,
                 "phash" : perceptual,
+                "embedding" : emb.tolist(),
                 "time" : datetime.utcnow(),
                 "messageObj" : message
             }
@@ -281,7 +282,10 @@ async def on_reaction_add(reaction, user):
 
                 pendingData = Dict[key]
                 await pendingData["messageObj"].delete()
-                bannedImageDict[pendingData["sha256"]] = {"phash" : str(pendingData["phash"])}
+                bannedImageDict[pendingData["sha256"]] = {
+                    "phash" : str(pendingData["phash"]),
+                    "embedding" : pendingData["embedding"]
+                }
 
                 toDelete.append(key)
                 writeJson("bannedList.json", bannedImageDict)

@@ -37,7 +37,7 @@ async def blockCommand(interaction: discord.Interaction, url: str):
 
             imageBytes = response.content
             
-            imageSHA256, imagePerceptual = calcImageHash(imageBytes)
+            imageSHA256, imagePerceptual, emb = calcImageHash(imageBytes)
 
             if imageSHA256 in bannedImageDict.keys():
                 await interaction.response.send_message("The image is already in the banned list...", ephemeral=True)
@@ -46,7 +46,10 @@ async def blockCommand(interaction: discord.Interaction, url: str):
 
                 logger.info(f"Image has been manually added by {interaction.user.name} sha256: {imageSHA256} phash: {imagePerceptual}")
                 await interaction.response.send_message(f"The requested image has been added to the banned list. {str(emoji)}")
-                bannedImageDict[imageSHA256] =  {"phash" : str(imagePerceptual)}
+                bannedImageDict[imageSHA256] =  {
+                    "phash" : str(imagePerceptual),
+                    "embedding" : emb.tolist()
+                }
                 writeJson("bannedList.json", bannedImageDict)
                 
         else:
