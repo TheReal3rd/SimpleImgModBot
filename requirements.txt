@@ -1,3 +1,9 @@
 discord.py
 pillow 
 imagehash
+requests
+torch
+torchvision
+open_clip_torch
+faiss-cpu
+numpy

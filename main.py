@@ -1,10 +1,15 @@
 import discord
 import hashlib
 import imagehash
-import json
-import os
 import random
 import logging
+import torch
+import open_clip
+import faiss
+import numpy as np
+import aiohttp
+import io
+import os
 
 from pathlib import Path
 from PIL import Image
@@ -13,33 +18,34 @@ from discord import app_commands
 from discord.ext import commands, tasks
 from datetime import datetime, timedelta
 from collections import deque
+from utils import *
 
 if __name__ != "__main__":
     quit()
 
 #Utils funcs.
 
-def readJson(path, default=None):
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return default if default is not None else {}
-
-def writeJson(path, data):
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4, ensure_ascii=False)
+IMG_EXTENSIONS = [".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff", ".tif", ".heic", ".heif", ".avif", ".jfif",] 
+# Few formats aren't included due to not working with current set up nor scope.
 
 def calcImageHash(imageBytes: bytes):
     sha = hashlib.sha256(imageBytes).hexdigest()
     img = Image.open(BytesIO(imageBytes))
     phash = str(imagehash.phash(img))
-    return (sha, phash)
+    emb = getEmbedding(imageBytes)
+    return (sha, phash, emb)
 
-def loadImageFolder(folderPath, bannedDict):#TODO possible filter none image files from being processed.
+def loadImageFolder(folderPath, bannedDict, configDict):
     for filename in os.listdir(folderPath):
+        correctFormat = False
+        for ext in IMG_EXTENSIONS:
+            if filename.endswith(ext):
+                correctFormat = True
+                break
+
+        if not correctFormat:
+            continue
+
         filePath = os.path.join(folderPath, filename)
 
         if not os.path.isfile(filePath):
@@ -50,10 +56,11 @@ def loadImageFolder(folderPath, bannedDict):#TODO possible filter none image fil
             with open(filePath, "rb") as f:
                 imageData = f.read()
 
-            sha, phash = calcImageHash(imageData)
+            sha, phash, emb = calcImageHash(imageData)
 
             bannedDict[sha] = {
-                "phash" : phash
+                "phash" : phash,
+                "embedding" : emb.tolist()
             }
 
             if not configDict["Debug"]:#To prevent images being deleted and lost while in development.
@@ -61,24 +68,6 @@ def loadImageFolder(folderPath, bannedDict):#TODO possible filter none image fil
                 logger.warning(f"Image deleted {filePath}")
         except Exception as e:
             logger.error(f"Failed to process image: {filename} | {e}")
-
-def getFiles(folderPath, endWithFilter):
-    result = []
-    for filename in os.listdir(folderPath):
-        filePath = os.path.join(folderPath, filename)
-
-        if not os.path.isfile(filePath):
-            continue
-             
-        if not filePath.endswith(endWithFilter):
-            continue
-   
-        result.append(filePath)
-
-    return result
-
-def hasDaysPassed(startTime, days=1):
-    return datetime.utcnow() >= startTime + timedelta(days=days)
 
 def fetchLogs():
     result = []
@@ -111,6 +100,36 @@ logger.addHandler(memoryHandler)
 
 #Vars
 
+#CLIP
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+model, preprocess, _ = open_clip.create_model_and_transforms(
+    "ViT-B-32",
+    pretrained="openai"
+)
+model = model.to(device)
+model.eval()
+
+dim = 512
+index = faiss.IndexFlatIP(dim)
+imageStore = []
+
+@torch.no_grad()
+def getEmbedding(imageBytes):
+    image = Image.open(io.BytesIO(imageBytes)).convert("RGB")
+    image = preprocess(image).unsqueeze(0).to(device)
+
+    emb = model.encode_image(image)
+    emb = emb / emb.norm(dim=-1, keepdim=True)
+
+    return emb.cpu().numpy().astype("float32")[0]
+
+def cosineSimilarity(a, b):
+    a = np.array(a)
+    b = np.array(b)
+    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
 #Config const's and load.
 DEFAULT_CONFIG = {
     "ServerID" : "",
@@ -140,7 +159,7 @@ client = commands.Bot(command_prefix = "!" ,intents=intents)
 #Banned image load and hash.
 bannedImageDict = {}
 bannedImageDict = readJson("bannedList.json", {})
-loadImageFolder("images", bannedImageDict)
+loadImageFolder("images", bannedImageDict, configDict)
 writeJson("bannedList.json", bannedImageDict)
 
 # working
@@ -151,9 +170,18 @@ SERVER_ID = configDict["ServerID"]
 CHANNEL_ID = configDict["ChannelID"]
 MSG_LEN_LIMIT = 2000
 EMBED_LEN_LIMIT = 4095
+IMG_EXTENSIONS = [".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff", ".tif", ".heic", ".heif", ".avif", ".jfif",] 
+# Few formats aren't included due to not working with current set up nor scope.
 
 @client.event
 async def on_ready():
+    await registerCommands()
+
+    logger.info(f'Logged in as {client.user}')
+    if not update_loop.is_running():
+        update_loop.start()
+
+async def registerCommands():
     commandFiles = getFiles("commands", "py")
     for file in commandFiles:
         with open(file, "r") as f:
@@ -161,14 +189,9 @@ async def on_ready():
             exec(code)
             logger.info(f"Command loaded: {file}")
 
-
     guild = discord.Object(id=SERVER_ID)
     client.tree.copy_global_to(guild=guild)
     await client.tree.sync(guild=guild)
-
-    logger.info(f'Logged in as {client.user}')
-    if not update_loop.is_running():
-        update_loop.start()
 
 async def sendMessage(serverID, channelID, message):
     guild = client.get_guild(serverID)
@@ -202,7 +225,7 @@ async def on_message(message):
         if attachment.content_type and attachment.content_type.startswith("image/"):
             imageBytes = await attachment.read()
             
-            imageSHA256, imagePerceptual = calcImageHash(imageBytes)
+            imageSHA256, imagePerceptual, imageEmb = calcImageHash(imageBytes)
 
             logger.info(f"Image posted: {message.channel} | sha256: {imageSHA256} | phash: {imagePerceptual}")
             if len(bannedImageDict.keys()) != 0:
@@ -210,16 +233,19 @@ async def on_message(message):
                     dataDict = bannedImageDict[bannedImage]
                     hash256 = bannedImage
                     perceptual = imagehash.hex_to_hash(dataDict["phash"])
+                    emb = dataDict["embedding"]
 
                     matching256 = hash256 == imageSHA256
                     perceptualDist = imagehash.hex_to_hash(imagePerceptual) - perceptual <= configDict["Phash_Threshold"]
+                    embeddingScore = cosineSimilarity(imageEmb, emb)
+                    embeddingMatch =  embeddingScore >= 0.87
 
-                    if matching256 or perceptualDist:
-                        logger.info(f"Image matching with banned list of sha256: {imageSHA256} phash: {imagePerceptual}")
+                    if matching256 or perceptualDist or embeddingMatch:
+                        logger.info(f"Image matching with banned list of sha256: {imageSHA256} phash: {imagePerceptual} emb score: {embeddingScore}")
 
                         msg = f"""
                         Image matching in banned list was posted in {message.channel.name} by {message.author.name} 
-                        \n\nsha256: {imageSHA256}\nphash: {imagePerceptual}
+                        \n\nsha256: {imageSHA256}\nphash: {imagePerceptual}\nemb: {embeddingScore}
                         """
                         await sendMessage(SERVER_ID, CHANNEL_ID, msg)
 
