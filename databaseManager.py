@@ -2,75 +2,105 @@ import sqlite3
 import numpy as np
 import faiss
 
-# Entirely AI.
-# 
+#Entirely AI generated.
 
 class DatabaseManager:
 
-    def __init__(self, db_path="fingerprints.db", dim=512):
+    def __init__(self, db_path: str = "fingerprints.db", embedding_dim: int = 512):
         self.db_path = db_path
-        self.dim = dim
+        self.embedding_dim = embedding_dim
 
         self.conn = sqlite3.connect(self.db_path)
         self.cursor = self.conn.cursor()
 
         self.cursor.execute("""
         CREATE TABLE IF NOT EXISTS fingerprints (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            sha256 TEXT UNIQUE,
-            phash TEXT,
-            embedding BLOB
+            sha256 TEXT PRIMARY KEY,
+            phash TEXT NOT NULL,
+            embedding BLOB NOT NULL
         )
         """)
         self.conn.commit()
 
-        self.index = faiss.IndexFlatIP(self.dim)
-        self.id_map = []
-        self._load_all()
+        # cosine similarity index
+        self.index = faiss.IndexFlatIP(self.embedding_dim)
+        self.sha_map = []
+        self.rebuild_index()
 
-    def _serialize(self, vec: np.ndarray):
-        return vec.astype("float32").tobytes()
+    @staticmethod
+    def _serialize_embedding(embedding: np.ndarray) -> bytes:
+        return embedding.astype(np.float32).tobytes()
 
-    def _deserialize(self, blob):
-        return np.frombuffer(blob, dtype="float32")
+    @staticmethod
+    def _deserialize_embedding(blob: bytes) -> np.ndarray:
+        return np.frombuffer(blob, dtype=np.float32)
 
-    def add(self, sha256: str, phash: str, embedding: np.ndarray):
+    def exists(self, sha256: str) -> bool:
+        self.cursor.execute(
+            "SELECT 1 FROM fingerprints WHERE sha256 = ?",
+            (sha256,)
+        )
+        return self.cursor.fetchone() is not None
+
+    def add(self, sha256: str, phash: str, embedding: np.ndarray) -> bool:
+        if self.exists(sha256):
+            return False
+
+        embedding = embedding.astype(np.float32)
+
         self.cursor.execute("""
-        INSERT OR IGNORE INTO fingerprints (sha256, phash, embedding)
+        INSERT INTO fingerprints (
+            sha256,
+            phash,
+            embedding
+        )
         VALUES (?, ?, ?)
         """, (
             sha256,
             phash,
-            self._serialize(embedding)
+            self._serialize_embedding(embedding)
         ))
 
         self.conn.commit()
 
-        # add to FAISS
-        self.index.add(np.array([embedding.astype("float32")]))
-        self.id_map.append(sha256)
+        self.index.add(np.array([embedding], dtype=np.float32))
+        self.sha_map.append(sha256)
 
-    def get_by_sha256(self, sha256: str):
+        return True
+
+    def get(self, sha256: str):
         self.cursor.execute("""
-        SELECT sha256, phash, embedding
+        SELECT
+            sha256,
+            phash,
+            embedding
         FROM fingerprints
         WHERE sha256 = ?
         """, (sha256,))
 
         row = self.cursor.fetchone()
 
-        if not row:
+        if row is None:
             return None
 
         return {
             "sha256": row[0],
             "phash": row[1],
-            "embedding": self._deserialize(row[2])
+            "embedding": self._deserialize_embedding(row[2])
         }
+
+    def count(self) -> int:
+        self.cursor.execute(
+            "SELECT COUNT(*) FROM fingerprints"
+        )
+        return self.cursor.fetchone()[0]
 
     def fetch_all(self):
         self.cursor.execute("""
-        SELECT sha256, phash, embedding
+        SELECT
+            sha256,
+            phash,
+            embedding
         FROM fingerprints
         """)
 
@@ -78,49 +108,62 @@ class DatabaseManager:
 
         return [
             {
-                "sha256": r[0],
-                "phash": r[1],
-                "embedding": self._deserialize(r[2])
+                "sha256": row[0],
+                "phash": row[1],
+                "embedding": self._deserialize_embedding(row[2])
             }
-            for r in rows
+            for row in rows
         ]
 
-    def search(self, embedding: np.ndarray, top_k=5):
-        if len(self.id_map) == 0:
+    def search(self, embedding: np.ndarray, top_k: int = 5):
+        if not self.sha_map:
             return []
 
-        D, I = self.index.search(
-            np.array([embedding.astype("float32")]),
-            top_k
+        embedding = embedding.astype(np.float32)
+
+        k = min(top_k, len(self.sha_map))
+
+        distances, indices = self.index.search(
+            np.array([embedding], dtype=np.float32),
+            k
         )
 
         results = []
 
-        for score, idx in zip(D[0], I[0]):
-            if idx < len(self.id_map):
-                sha = self.id_map[idx]
+        for score, idx in zip(distances[0], indices[0]):
 
-                self.cursor.execute("""
-                SELECT sha256, phash, embedding
-                FROM fingerprints
-                WHERE sha256 = ?
-                """, (sha,))
+            if idx < 0:
+                continue
 
-                row = self.cursor.fetchone()
+            sha256 = self.sha_map[idx]
 
-                if row:
-                    results.append({
-                        "score": float(score),
-                        "sha256": row[0],
-                        "phash": row[1],
-                        "embedding": self._deserialize(row[2])
-                    })
+            self.cursor.execute("""
+            SELECT
+                sha256,
+                phash
+            FROM fingerprints
+            WHERE sha256 = ?
+            """, (sha256,))
+
+            row = self.cursor.fetchone()
+
+            if row:
+                results.append({
+                    "score": float(score),
+                    "sha256": row[0],
+                    "phash": row[1]
+                })
 
         return results
 
-    def _load_all(self):
+    def rebuild_index(self):
+        self.index = faiss.IndexFlatIP(self.embedding_dim)
+        self.sha_map = []
+
         self.cursor.execute("""
-        SELECT sha256, embedding
+        SELECT
+            sha256,
+            embedding
         FROM fingerprints
         """)
 
@@ -129,12 +172,23 @@ class DatabaseManager:
         if not rows:
             return
 
-        vectors = []
+        embeddings = []
 
-        for sha, emb_blob in rows:
-            vec = self._deserialize(emb_blob)
-            vectors.append(vec)
-            self.id_map.append(sha)
+        for sha256, blob in rows:
+            embeddings.append(
+                self._deserialize_embedding(blob)
+            )
+            self.sha_map.append(sha256)
 
-        if vectors:
-            self.index.add(np.array(vectors, dtype="float32"))
+        self.index.add(
+            np.array(
+                embeddings,
+                dtype=np.float32
+            )
+        )
+
+    def close(self):
+        self.conn.close()
+
+    def __len__(self):
+        return self.count()

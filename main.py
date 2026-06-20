@@ -19,6 +19,7 @@ from discord.ext import commands, tasks
 from datetime import datetime, timedelta
 from collections import deque
 from utils import *
+from databaseManager import *
 
 if __name__ != "__main__":
     quit()
@@ -35,7 +36,7 @@ def calcImageHash(imageBytes: bytes):
     emb = getEmbedding(imageBytes)
     return (sha, phash, emb)
 
-def loadImageFolder(folderPath, bannedDict, configDict):
+def loadImageFolder(folderPath, configDict):
     for filename in os.listdir(folderPath):
         correctFormat = False
         for ext in IMG_EXTENSIONS:
@@ -57,11 +58,7 @@ def loadImageFolder(folderPath, bannedDict, configDict):
                 imageData = f.read()
 
             sha, phash, emb = calcImageHash(imageData)
-
-            bannedDict[sha] = {
-                "phash" : phash,
-                "embedding" : emb.tolist()
-            }
+            databaseManager.add(sha, phash, emb)
 
             if not configDict["Debug"]:#To prevent images being deleted and lost while in development.
                 os.remove(filePath)
@@ -97,8 +94,6 @@ memoryHandler = MemoryHandler()
 logger.addHandler(fileHandler)
 logger.addHandler(consoleHandler)
 logger.addHandler(memoryHandler)
-
-#Vars
 
 #CLIP
 
@@ -136,6 +131,7 @@ DEFAULT_CONFIG = {
     "ChannelID" : "",
     "Token" : "",
     "Phash_Threshold" : 5,
+    "Embedding_Threshold" : 0.87,
     "Debug" : True,
 }
 # Phash_Threshold
@@ -157,13 +153,10 @@ intents.messages = True
 client = commands.Bot(command_prefix = "!" ,intents=intents)
 
 #Banned image load and hash.
-bannedImageDict = {}
-bannedImageDict = readJson("bannedList.json", {})
-loadImageFolder("images", bannedImageDict, configDict)
-writeJson("bannedList.json", bannedImageDict)
+databaseManager = DatabaseManager()
 
 # working
-pendingChecksDict = {}
+pendingChecksDict = {} # TODO Start saving pendings.
 
 #General Const's
 SERVER_ID = configDict["ServerID"]
@@ -228,30 +221,28 @@ async def on_message(message):
             imageSHA256, imagePerceptual, imageEmb = calcImageHash(imageBytes)
 
             logger.info(f"Image posted: {message.channel} | sha256: {imageSHA256} | phash: {imagePerceptual}")
-            if len(bannedImageDict.keys()) != 0:
-                for bannedImage in bannedImageDict.keys():
-                    dataDict = bannedImageDict[bannedImage]
-                    hash256 = bannedImage
-                    perceptual = imagehash.hex_to_hash(dataDict["phash"])
-                    emb = dataDict["embedding"]
+            for dataDict in databaseManager.fetch_all():
+                hash256 = dataDict["sha256"]
+                perceptual = imagehash.hex_to_hash(dataDict["phash"])
+                emb = dataDict["embedding"]
 
-                    matching256 = hash256 == imageSHA256
-                    perceptualDist = imagehash.hex_to_hash(imagePerceptual) - perceptual <= configDict["Phash_Threshold"]
-                    embeddingScore = cosineSimilarity(imageEmb, emb)
-                    embeddingMatch =  embeddingScore >= 0.87
+                matching256 = hash256 == imageSHA256
+                perceptualDist = imagehash.hex_to_hash(imagePerceptual) - perceptual <= configDict["Phash_Threshold"]
+                embeddingScore = cosineSimilarity(imageEmb, emb)
+                embeddingMatch =  embeddingScore >= configDict["Embedding_Threshold"]
 
-                    if matching256 or perceptualDist or embeddingMatch:
-                        logger.info(f"Image matching with banned list of sha256: {imageSHA256} phash: {imagePerceptual} emb score: {embeddingScore}")
+                if matching256 or perceptualDist or embeddingMatch:
+                    logger.info(f"Image matching with banned list of sha256: {imageSHA256} phash: {imagePerceptual} emb score: {embeddingScore}")
 
-                        msg = f"""
-                        Image matching in banned list was posted in {message.channel.name} by {message.author.name} 
-                        \n\nsha256: {imageSHA256}\nphash: {imagePerceptual}\nemb: {embeddingScore}
-                        """
-                        await sendMessage(SERVER_ID, CHANNEL_ID, msg)
+                    msg = f"""
+                    Image matching in banned list was posted in {message.channel.name} by {message.author.name} 
+                    \n\nsha256: {imageSHA256}\nphash: {imagePerceptual}\nemb: {embeddingScore}
+                    """
+                    await sendMessage(SERVER_ID, CHANNEL_ID, msg)
 
-                        await message.delete()
-                        await timeoutUser(message.author)
-                        return
+                    await message.delete()
+                    await timeoutUser(message.author)
+                    return
             
             msg = f"""
             Image has been posted in {message.channel.name} by {message.author.name} react with :thumbsup: to blacklist. 
@@ -262,8 +253,8 @@ async def on_message(message):
 
             pendingChecksDict[msgID] = {
                 "sha256" : imageSHA256,
-                "phash" : perceptual,
-                "embedding" : emb.tolist(),
+                "phash" : imagePerceptual,
+                "embedding" : imageEmb,
                 "time" : datetime.utcnow(),
                 "messageObj" : message
             }
@@ -280,15 +271,11 @@ async def on_reaction_add(reaction, user):
             if reaction.emoji == "👍":
                 await reaction.message.channel.send("Added image to banned list!") 
 
-                pendingData = Dict[key]
+                pendingData = pendingChecksDict[key]
                 await pendingData["messageObj"].delete()
-                bannedImageDict[pendingData["sha256"]] = {
-                    "phash" : str(pendingData["phash"]),
-                    "embedding" : pendingData["embedding"]
-                }
+                databaseManager.add(pendingData["sha256"], pendingData["phash"], pendingData["embedding"])
 
                 toDelete.append(key)
-                writeJson("bannedList.json", bannedImageDict)
 
     if len(toDelete) != 0:
         for key in toDelete:

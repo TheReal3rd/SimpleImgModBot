@@ -46,11 +46,7 @@ async def blockCommand(interaction: discord.Interaction, url: str):
 
                 logger.info(f"Image has been manually added by {interaction.user.name} sha256: {imageSHA256} phash: {imagePerceptual}")
                 await interaction.response.send_message(f"The requested image has been added to the banned list. {str(emoji)}")
-                bannedImageDict[imageSHA256] =  {
-                    "phash" : str(imagePerceptual),
-                    "embedding" : emb.tolist()
-                }
-                writeJson("bannedList.json", bannedImageDict)
+                databaseManager.add(imageSHA256, imagePerceptual, emb)
                 
         else:
             errMsg = "Failed to pass the URL checks. Ensure the URL is correctly formatted."
