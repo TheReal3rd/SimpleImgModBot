@@ -12,9 +12,9 @@ from datetime import datetime, timedelta
 from collections import deque
 
 #Strings
-def limitString(msg, maxLength, end="..."):
-    if len(msg) >= maxLength:
-        return msg[:maxLength - (len(end) + 1)].rsplit(" ", 1)[0] + end
+def limitString(msg, maxLength, end="..."): # TODO maybe check if special characters provide the incorrect sizeing. 
+    if len(msg) >= maxLength + 2:
+        return msg[:maxLength - (len(end) + 3)].rsplit(" ", 1)[0] + end
     return msg
 
 #Json

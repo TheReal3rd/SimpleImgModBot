@@ -10,6 +10,8 @@ import numpy as np
 import aiohttp
 import io
 import os
+import asyncio
+import signal
 
 from pathlib import Path
 from PIL import Image
@@ -25,8 +27,15 @@ if __name__ != "__main__":
     quit()
 
 #Utils funcs.
-
+MSG_LEN_LIMIT = 2000
+EMBED_LEN_LIMIT = 4095
 IMG_EXTENSIONS = [".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff", ".tif", ".heic", ".heif", ".avif", ".jfif",] 
+# Few formats aren't included due to not working with current set up nor scope.
+
+PEND_CHECKS_PATH = "pendingChecks.json"
+PEND_BANS_PATH = "pendingBans.json"
+CONFIG_PATH = "config.json"
+
 # Few formats aren't included due to not working with current set up nor scope.
 
 def calcImageHash(imageBytes: bytes):
@@ -58,11 +67,14 @@ def loadImageFolder(folderPath, configDict):
                 imageData = f.read()
 
             sha, phash, emb = calcImageHash(imageData)
-            databaseManager.add(sha, phash, emb)
+            if databaseManager.add(sha, phash, emb):
+                logger.info(f"Image added to database: {filename}")
 
-            if not configDict["Debug"]:#To prevent images being deleted and lost while in development.
-                os.remove(filePath)
-                logger.warning(f"Image deleted {filePath}")
+                if not configDict["Debug"]:#To prevent images being deleted and lost while in development.
+                    os.remove(filePath)
+                    logger.warning(f"Image deleted {filePath}")
+            else:
+                logger.warning(f"Failed to add {filename} to the database...")
         except Exception as e:
             logger.error(f"Failed to process image: {filename} | {e}")
 
@@ -133,6 +145,7 @@ DEFAULT_CONFIG = {
     "Phash_Threshold" : 5,
     "Embedding_Threshold" : 0.87,
     "Debug" : True,
+    "NumThreads" : 4,
 }
 # Phash_Threshold
 #0 = identical perceptually
@@ -141,8 +154,8 @@ DEFAULT_CONFIG = {
 #>15 = likely different images
 
 configDict = {}
-configDict = readJson("config.json", DEFAULT_CONFIG)
-writeJson("config.json", configDict)
+configDict = readJson(CONFIG_PATH, DEFAULT_CONFIG)
+writeJson(CONFIG_PATH, configDict)
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -154,17 +167,20 @@ client = commands.Bot(command_prefix = "!" ,intents=intents)
 
 #Banned image load and hash.
 databaseManager = DatabaseManager()
+loadImageFolder("images", configDict)
 
 # working
-pendingChecksDict = {} # TODO Start saving pendings.
+# msgID = sha256, phash, embedding, time and messageObj
+pendingChecksDict = {}
+# msgID = time, userObj
+pendingBansDict = {}
+
+pendingBansDict = readJson(PEND_BANS_PATH)
+pendingChecksDict = readJson(PEND_CHECKS_PATH)
 
 #General Const's
 SERVER_ID = configDict["ServerID"]
 CHANNEL_ID = configDict["ChannelID"]
-MSG_LEN_LIMIT = 2000
-EMBED_LEN_LIMIT = 4095
-IMG_EXTENSIONS = [".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff", ".tif", ".heic", ".heif", ".avif", ".jfif",] 
-# Few formats aren't included due to not working with current set up nor scope.
 
 @client.event
 async def on_ready():
@@ -198,16 +214,47 @@ async def sendMessage(serverID, channelID, message):
     msg = await channel.send(message)
     return msg.id
 
+async def getMember(userID):
+    guild = client.get_guild(SERVER_ID)
+    if guild is None:
+        guild = await client.fetch_guild(SERVER_ID)
+
+    member = guild.get_member(userID)
+    if member is None:
+        member = await guild.fetch_member(userID)
+
+    return member
+
 async def timeoutUser(user):
     try:
-        await user.timeout(
-            timedelta(days=28),
-            reason = "ClankerMod - Spam / Scam images or banned images posting."
-        )
-        logger.info(f"User as been timedout for 28 days. User: {user.name}")
-
+        await user.timeout(timedelta(days=28), reason = "ClankerMod - Spam / Scam images or banned images posting.")
+        logger.info(f"User has been timedout for 28 days. User: {user.name}")
+        return True
     except discord.Forbidden:
-        logger.error("Missing required permissions.")
+        logger.error("Missing required permissions to timeout user.")
+    return False
+
+async def banUser(user):
+    try:
+        await user.ban(reason="ClankerMod - User ban after mod approval.")
+        logger.info(f"User has been banned forever. User: {user.name}")
+        return True
+    except discord.Forbidden:
+        logger.error("Missing required permissions to ban user.")
+    return False
+
+
+async def getMessage(channelID, messageID):
+    guild = client.get_guild(SERVER_ID)
+    if guild is None:
+        guild = await client.fetch_guild(SERVER_ID)
+
+    channel = guild.get_channel(channelID)
+    if channel is None:
+        channel = await client.fetch_channel(channelID)
+
+    message = await channel.fetch_message(messageID)
+    return message
 
 @client.event
 async def on_message(message):
@@ -227,21 +274,28 @@ async def on_message(message):
                 emb = dataDict["embedding"]
 
                 matching256 = hash256 == imageSHA256
-                perceptualDist = imagehash.hex_to_hash(imagePerceptual) - perceptual <= configDict["Phash_Threshold"]
+                perceptualDist = imagehash.hex_to_hash(imagePerceptual) - perceptual <= configDict["PhashThreshold"]
                 embeddingScore = cosineSimilarity(imageEmb, emb)
-                embeddingMatch =  embeddingScore >= configDict["Embedding_Threshold"]
+                embeddingMatch =  embeddingScore >= configDict["EmbeddingThreshold"]
 
                 if matching256 or perceptualDist or embeddingMatch:
                     logger.info(f"Image matching with banned list of sha256: {imageSHA256} phash: {imagePerceptual} emb score: {embeddingScore}")
 
+                    timeoutResult = await timeoutUser(message.author)
+
                     msg = f"""
                     Image matching in banned list was posted in {message.channel.name} by {message.author.name} 
                     \n\nsha256: {imageSHA256}\nphash: {imagePerceptual}\nemb: {embeddingScore}
+                    \nTimeout success: {timeoutResult} 
+                    \nReact with :thumbsup: to ban the user.
                     """
-                    await sendMessage(SERVER_ID, CHANNEL_ID, msg)
-
+                    msgID = await sendMessage(SERVER_ID, CHANNEL_ID, msg)
                     await message.delete()
-                    await timeoutUser(message.author)
+
+                    pendingBansDict[str(msgID)] = {
+                        "time" : datetime.utcnow().isoformat(),
+                        "userID" : message.author.id,
+                    }
                     return
             
             msg = f"""
@@ -251,54 +305,102 @@ async def on_message(message):
             """ 
             msgID = await sendMessage(SERVER_ID, CHANNEL_ID, msg)
 
-            pendingChecksDict[msgID] = {
+            pendingChecksDict[str(msgID)] = {
                 "sha256" : imageSHA256,
                 "phash" : imagePerceptual,
-                "embedding" : imageEmb,
-                "time" : datetime.utcnow(),
-                "messageObj" : message
+                "embedding" : imageEmb.tolist(),
+                "time" : datetime.utcnow().isoformat(),
+                "messageID" : message.id,
+                "channelID" : message.channel.id,
             }
             return
-       
+
+
+    
+
 @client.event
-async def on_reaction_add(reaction, user):
+async def on_raw_reaction_add(payload):
+    user = await getMember(payload.user_id)
+    reactMessageID = str(payload.message_id)
+
     if user.bot:
         return
 
-    toDelete = []
-    for key in pendingChecksDict.keys():
-        if reaction.message.id == key:
-            if reaction.emoji == "👍":
-                await reaction.message.channel.send("Added image to banned list!") 
+    if payload.emoji.name == "👍":
 
-                pendingData = pendingChecksDict[key]
-                await pendingData["messageObj"].delete()
-                databaseManager.add(pendingData["sha256"], pendingData["phash"], pendingData["embedding"])
+        if reactMessageID in pendingChecksDict.keys():
 
-                toDelete.append(key)
+            if not user.guild_permissions.administrator:
+                await interaction.response.send_message("You're not an administrator.", ephemeral=False)
+                logger.warning(f"{user.name} attempted to approve a image ban but aren't administrator.")
+                return
 
-    if len(toDelete) != 0:
-        for key in toDelete:
-            del pendingChecksDict[key]
+            await sendMessage(SERVER_ID, CHANNEL_ID, "Added image to banned list.") 
 
+            pendingData = pendingChecksDict[reactMessageID]
+
+            offendingMessage = await getMessage(pendingData["channelID"], pendingData["messageID"])
+
+            if offendingMessage:
+                await offendingMessage.delete()
+                
+                pendingSHA256 = pendingData["sha256"]
+                databaseManager.add(pendingSHA256, pendingData["phash"], np.array(pendingData["embedding"], dtype=np.float32))
+                    
+                logger.info(f"{user.name} has banned an image. sha256: {pendingSHA256}")
+            else:
+                logger.error("Ran into enternal error trying to delete offending message...")
+
+            del pendingChecksDict[reactMessageID]
+
+        if reactMessageID in pendingBansDict.keys():
+            if not user.guild_permissions.administrator:
+                await interaction.response.send_message("You're not an administrator.", ephemeral=False)
+                logger.warning(f"{user.name} attempted to approve a ban but aren't administrator.")
+                return
+
+            banData = pendingBansDict[reactMessageID]
+            userObj = await getMember(banData["userID"])
+            banResult = await banUser(userObj)
+
+            await sendMessage(SERVER_ID, CHANNEL_ID, f"The user will be banned. User: {userObj.name} Success: {banResult}") 
+            logger.info(f"{user.name} has banned the user {userObj.name}")
+
+            del pendingBansDict[reactMessageID]
+            
 
 @tasks.loop(seconds=60)
 async def update_loop():
-    if len(pendingChecksDict.keys()) <= 0:
-        return
+    if len(pendingChecksDict.keys()) != 0:
+        toDelete = []
+        for key in pendingChecksDict.keys():
+            pending = pendingChecksDict[key]
 
-    toDelete = []
-    for key in pendingChecksDict.keys():
-        pending = pendingChecksDict[key]
+            if hasDaysPassed(datetime.fromisoformat(pending["time"]), days=20):
+                toDelete.append(key)
+                continue
 
-        if hasDaysPassed(pending["time"], days=20):
-            toDelete.append(key)
-            continue
+        if len(toDelete) != 0:
+            for key in toDelete:
+                del pendingChecksDict[key]
 
-    if len(toDelete) != 0:
-        for key in toDelete:
-            del pendingChecksDict[key]
+    if len(pendingBansDict.keys()) != 0:
+        toDelete = []
+        for key in pendingBansDict.keys():
+            pending = pendingBansDict[key]
+
+            if hasDaysPassed(datetime.fromisoformat(pending["time"]), days=20):
+                toDelete.append(key)
+                continue
+
+        if len(toDelete) != 0:
+            for key in toDelete:
+                del pendingBansDict[key]
 
 
-
-client.run(configDict["Token"])
+try:
+    client.run(configDict["Token"])
+finally:
+    databaseManager.close()
+    writeJson(PEND_CHECKS_PATH, pendingChecksDict)
+    writeJson(PEND_BANS_PATH, pendingBansDict)

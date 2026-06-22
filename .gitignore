@@ -1,4 +1,6 @@
 config.json
+pendingBans.json
+pendingChecks.json
 images/*
 
 # Byte-compiled / optimized / DLL files
