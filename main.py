@@ -18,7 +18,7 @@ from PIL import Image
 from io import BytesIO
 from discord import app_commands
 from discord.ext import commands, tasks
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from collections import deque
 from utils import *
 from databaseManager import *
@@ -47,8 +47,30 @@ def calcSHA256(imageBytes: bytes):
 def calcEmbedding(imageBytes: bytes):
     return getEmbedding(imageBytes)
 
+def logCleanup(folderPath):
+    timeDateNow = datetime.now(UTC).strftime("%Y-%m-%d").split("-")
+    for filename in os.listdir(folderPath):
+        filePath = os.path.join(folderPath, filename)
+        if not os.path.isfile(filePath):
+            continue
+
+        if not filename.endswith(".log"):
+            continue
+
+        nameSplit = filename.split("-")
+        monthDiff = abs(int(nameSplit[1]) - int(timeDateNow[1]))
+        yearDiff = abs(int(nameSplit[0]) - int(timeDateNow[0]))
+
+        if yearDiff >= 1 or monthDiff >= 1:
+            logger.info(f"Log cleanup {filename} has been deleted.")
+            os.remove(filePath)
+
 def loadImageFolder(folderPath, configDict):
     for filename in os.listdir(folderPath):
+        filePath = os.path.join(folderPath, filename)
+        if not os.path.isfile(filePath):
+            continue
+
         correctFormat = False
         for ext in IMG_EXTENSIONS:
             if filename.endswith(ext):
@@ -56,11 +78,6 @@ def loadImageFolder(folderPath, configDict):
                 break
 
         if not correctFormat:
-            continue
-
-        filePath = os.path.join(folderPath, filename)
-
-        if not os.path.isfile(filePath):
             continue
 
         try:
@@ -100,7 +117,9 @@ formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s
 consoleHandler = logging.StreamHandler()
 consoleHandler.setFormatter(formatter)
 
-fileHandler = logging.FileHandler("bot.log", encoding="utf-8")
+Path("logs").parent.mkdir(parents=True, exist_ok=True)
+timeDateNow = datetime.now(UTC).strftime("%Y-%m-%d_%H-%M-%S-%f")[:-3]
+fileHandler = logging.FileHandler(f"logs/{timeDateNow}-clankerModLog.log", encoding="utf-8")
 fileHandler.setFormatter(formatter)
 
 memoryHandler = MemoryHandler()
@@ -108,6 +127,8 @@ memoryHandler = MemoryHandler()
 logger.addHandler(fileHandler)
 logger.addHandler(consoleHandler)
 logger.addHandler(memoryHandler)
+
+logCleanup("logs")
 
 #CLIP
 
@@ -279,7 +300,7 @@ async def on_message(message):
                 await message.delete()
 
                 pendingBansDict[str(msgID)] = {
-                    "time" : datetime.utcnow().isoformat(),
+                    "time" : datetime.now(UTC).isoformat(),
                     "userID" : message.author.id,
                 }
                 foundMatch = True
@@ -307,7 +328,7 @@ async def on_message(message):
                         await message.delete()
 
                         pendingBansDict[str(msgID)] = {
-                            "time" : datetime.utcnow().isoformat(),
+                            "time" : datetime.now(UTC).isoformat(),
                             "userID" : message.author.id,
                         }
                         foundMatch = True
@@ -325,7 +346,7 @@ async def on_message(message):
                 pendingChecksDict[str(msgID)] = {
                     "sha256" : imageSHA256,
                     "embedding" : imageEmb.tolist(),
-                    "time" : datetime.utcnow().isoformat(),
+                    "time" : datetime.now(UTC).isoformat(),
                     "messageID" : message.id,
                     "channelID" : message.channel.id,
                 }

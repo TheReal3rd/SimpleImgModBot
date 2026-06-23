@@ -1,15 +1,9 @@
-import hashlib
-import imagehash
 import json
 import os
 import random
-import logging
 
 from pathlib import Path
-from PIL import Image
-from io import BytesIO
-from datetime import datetime, timedelta
-from collections import deque
+from datetime import datetime, timedelta, UTC
 
 #Strings
 def limitString(msg, maxLength, end="..."): # TODO maybe check if special characters provide the incorrect sizeing. 
@@ -49,4 +43,4 @@ def getFiles(folderPath, endWithFilter):
     return result
 
 def hasDaysPassed(startTime, days=1):
-    return datetime.utcnow() >= startTime + timedelta(days=days)
+    return datetime.now(UTC) >= startTime + timedelta(days=days)
