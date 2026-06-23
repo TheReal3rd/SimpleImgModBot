@@ -14,7 +14,7 @@ async def blockCommand(interaction: discord.Interaction, url: str):
             return
 
         correctStart = url.startswith("http://") or url.startswith("https://")
-        correctEnd = False
+        correctEnd = False#TODO actually get this to work.
         for ext in IMG_EXTENSIONS:
             correctEnd = url.endswith(ext)
             if correctEnd:
@@ -37,16 +37,16 @@ async def blockCommand(interaction: discord.Interaction, url: str):
 
             imageBytes = response.content
             
-            imageSHA256, imagePerceptual, emb = calcImageHash(imageBytes)
+            imageSHA256, emb = calcImageHash(imageBytes)
 
             if imageSHA256 in bannedImageDict.keys():
                 await interaction.response.send_message("The image is already in the banned list...", ephemeral=True)
             else:
                 emoji = discord.utils.get(interaction.guild.emojis, name="ThumbsUp")
 
-                logger.info(f"Image has been manually added by {interaction.user.name} sha256: {imageSHA256} phash: {imagePerceptual}")
+                logger.info(f"Image has been manually added by {interaction.user.name} sha256: {imageSHA256}")
                 await interaction.response.send_message(f"The requested image has been added to the banned list. {str(emoji)}")
-                databaseManager.add(imageSHA256, imagePerceptual, emb)
+                databaseManager.add(imageSHA256, emb)
                 
         else:
             errMsg = "Failed to pass the URL checks. Ensure the URL is correctly formatted."

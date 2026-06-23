@@ -16,7 +16,6 @@ class DatabaseManager:
         self.cursor.execute("""
         CREATE TABLE IF NOT EXISTS fingerprints (
             sha256 TEXT PRIMARY KEY,
-            phash TEXT NOT NULL,
             embedding BLOB NOT NULL
         )
         """)
@@ -42,7 +41,7 @@ class DatabaseManager:
         )
         return self.cursor.fetchone() is not None
 
-    def add(self, sha256: str, phash: str, embedding: np.ndarray) -> bool:
+    def add(self, sha256: str, embedding: np.ndarray) -> bool:
         if self.exists(sha256):
             return False
 
@@ -51,13 +50,11 @@ class DatabaseManager:
         self.cursor.execute("""
         INSERT INTO fingerprints (
             sha256,
-            phash,
             embedding
         )
-        VALUES (?, ?, ?)
+        VALUES (?, ?)
         """, (
             sha256,
-            phash,
             self._serialize_embedding(embedding)
         ))
 
@@ -72,7 +69,6 @@ class DatabaseManager:
         self.cursor.execute("""
         SELECT
             sha256,
-            phash,
             embedding
         FROM fingerprints
         WHERE sha256 = ?
@@ -85,8 +81,7 @@ class DatabaseManager:
 
         return {
             "sha256": row[0],
-            "phash": row[1],
-            "embedding": self._deserialize_embedding(row[2])
+            "embedding": self._deserialize_embedding(row[1])
         }
 
     def count(self) -> int:
@@ -99,7 +94,6 @@ class DatabaseManager:
         self.cursor.execute("""
         SELECT
             sha256,
-            phash,
             embedding
         FROM fingerprints
         """)
@@ -109,8 +103,7 @@ class DatabaseManager:
         return [
             {
                 "sha256": row[0],
-                "phash": row[1],
-                "embedding": self._deserialize_embedding(row[2])
+                "embedding": self._deserialize_embedding(row[1])
             }
             for row in rows
         ]
@@ -139,8 +132,7 @@ class DatabaseManager:
 
             self.cursor.execute("""
             SELECT
-                sha256,
-                phash
+                sha256
             FROM fingerprints
             WHERE sha256 = ?
             """, (sha256,))
@@ -151,7 +143,6 @@ class DatabaseManager:
                 results.append({
                     "score": float(score),
                     "sha256": row[0],
-                    "phash": row[1]
                 })
 
         return results

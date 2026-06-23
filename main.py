@@ -36,14 +36,16 @@ PEND_CHECKS_PATH = "pendingChecks.json"
 PEND_BANS_PATH = "pendingBans.json"
 CONFIG_PATH = "config.json"
 
-# Few formats aren't included due to not working with current set up nor scope.
-
 def calcImageHash(imageBytes: bytes):
     sha = hashlib.sha256(imageBytes).hexdigest()
-    img = Image.open(BytesIO(imageBytes))
-    phash = str(imagehash.phash(img))
     emb = getEmbedding(imageBytes)
-    return (sha, phash, emb)
+    return (sha, emb)
+
+def calcSHA256(imageBytes: bytes):
+    return hashlib.sha256(imageBytes).hexdigest()
+
+def calcEmbedding(imageBytes: bytes):
+    return getEmbedding(imageBytes)
 
 def loadImageFolder(folderPath, configDict):
     for filename in os.listdir(folderPath):
@@ -66,8 +68,8 @@ def loadImageFolder(folderPath, configDict):
             with open(filePath, "rb") as f:
                 imageData = f.read()
 
-            sha, phash, emb = calcImageHash(imageData)
-            if databaseManager.add(sha, phash, emb):
+            sha, emb = calcImageHash(imageData)
+            if databaseManager.add(sha, emb):
                 logger.info(f"Image added to database: {filename}")
 
                 if not configDict["Debug"]:#To prevent images being deleted and lost while in development.
@@ -109,7 +111,7 @@ logger.addHandler(memoryHandler)
 
 #CLIP
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = "cuda" if torch.cuda.is_available() else "cpu" # TODO maybe move this to config but obv handle it.
 
 model, preprocess, _ = open_clip.create_model_and_transforms(
     "ViT-B-32",
@@ -126,10 +128,8 @@ imageStore = []
 def getEmbedding(imageBytes):
     image = Image.open(io.BytesIO(imageBytes)).convert("RGB")
     image = preprocess(image).unsqueeze(0).to(device)
-
     emb = model.encode_image(image)
     emb = emb / emb.norm(dim=-1, keepdim=True)
-
     return emb.cpu().numpy().astype("float32")[0]
 
 def cosineSimilarity(a, b):
@@ -142,16 +142,10 @@ DEFAULT_CONFIG = {
     "ServerID" : "",
     "ChannelID" : "",
     "Token" : "",
-    "Phash_Threshold" : 5,
     "Embedding_Threshold" : 0.87,
     "Debug" : True,
-    "NumThreads" : 4,
+    "NumThreads" : 4, #TODO
 }
-# Phash_Threshold
-#0 = identical perceptually
-#1-5 = usually same image with compression/resizing
-#5-15 = possibly same image with edits
-#>15 = likely different images
 
 configDict = {}
 configDict = readJson(CONFIG_PATH, DEFAULT_CONFIG)
@@ -170,7 +164,7 @@ databaseManager = DatabaseManager()
 loadImageFolder("images", configDict)
 
 # working
-# msgID = sha256, phash, embedding, time and messageObj
+# msgID = sha256, embedding, time and messageObj
 pendingChecksDict = {}
 # msgID = time, userObj
 pendingBansDict = {}
@@ -265,58 +259,77 @@ async def on_message(message):
         if attachment.content_type and attachment.content_type.startswith("image/"):
             imageBytes = await attachment.read()
             
-            imageSHA256, imagePerceptual, imageEmb = calcImageHash(imageBytes)
+            imageSHA256 = calcSHA256(imageBytes)
+            dbFetchSHA = databaseManager.get(imageSHA256)
 
-            logger.info(f"Image posted: {message.channel} | sha256: {imageSHA256} | phash: {imagePerceptual}")
-            for dataDict in databaseManager.fetch_all():
-                hash256 = dataDict["sha256"]
-                perceptual = imagehash.hex_to_hash(dataDict["phash"])
-                emb = dataDict["embedding"]
+            foundMatch = False
+            logger.info(f"Image posted: {message.channel} | sha256: {imageSHA256}")
+            if dbFetchSHA != None and dbFetchSHA["sha256"] == imageSHA256:
+                logger.info(f"Image matching with banned list of sha256: {imageSHA256}")
 
-                matching256 = hash256 == imageSHA256
-                perceptualDist = imagehash.hex_to_hash(imagePerceptual) - perceptual <= configDict["PhashThreshold"]
-                embeddingScore = cosineSimilarity(imageEmb, emb)
-                embeddingMatch =  embeddingScore >= configDict["EmbeddingThreshold"]
+                timeoutResult = await timeoutUser(message.author)
 
-                if matching256 or perceptualDist or embeddingMatch:
-                    logger.info(f"Image matching with banned list of sha256: {imageSHA256} phash: {imagePerceptual} emb score: {embeddingScore}")
+                msg = f"""
+                Image matching in banned list was posted in {message.channel.name} by {message.author.name} 
+                \n\nsha256: {imageSHA256}
+                \nTimeout success: {timeoutResult} 
+                \nReact with :thumbsup: to ban the user.
+                """
+                msgID = await sendMessage(SERVER_ID, CHANNEL_ID, msg)
+                await message.delete()
 
-                    timeoutResult = await timeoutUser(message.author)
+                pendingBansDict[str(msgID)] = {
+                    "time" : datetime.utcnow().isoformat(),
+                    "userID" : message.author.id,
+                }
+                foundMatch = True
+            else:
+                logger.info(f"Embedding search into database...")
+                imageEmb = calcEmbedding(imageBytes)
+                dbSearchResult = databaseManager.search(imageEmb, 8)
 
-                    msg = f"""
-                    Image matching in banned list was posted in {message.channel.name} by {message.author.name} 
-                    \n\nsha256: {imageSHA256}\nphash: {imagePerceptual}\nemb: {embeddingScore}
-                    \nTimeout success: {timeoutResult} 
-                    \nReact with :thumbsup: to ban the user.
-                    """
-                    msgID = await sendMessage(SERVER_ID, CHANNEL_ID, msg)
-                    await message.delete()
+                for resultData in dbSearchResult:
+                    embScoreResult = resultData["score"]
+                    sha256Result = resultData["sha256"]
 
-                    pendingBansDict[str(msgID)] = {
-                        "time" : datetime.utcnow().isoformat(),
-                        "userID" : message.author.id,
-                    }
-                    return
+                    embeddingMatch =  embScoreResult >= configDict["EmbeddingThreshold"]
+                    if embeddingMatch:
+                        logger.info(f"Embedding search has found a high probability match with score: {embScoreResult}\nsha256:{sha256Result}")
+                        timeoutResult = await timeoutUser(message.author)
+
+                        msg = f"""
+                        Image matching in banned list was posted in {message.channel.name} by {message.author.name} 
+                        \nEmbedding Score: {embScoreResult}
+                        \nTimeout success: {timeoutResult} 
+                        \nReact with :thumbsup: to ban the user.
+                        """
+                        msgID = await sendMessage(SERVER_ID, CHANNEL_ID, msg)
+                        await message.delete()
+
+                        pendingBansDict[str(msgID)] = {
+                            "time" : datetime.utcnow().isoformat(),
+                            "userID" : message.author.id,
+                        }
+                        foundMatch = True
+                        break
             
-            msg = f"""
-            Image has been posted in {message.channel.name} by {message.author.name} react with :thumbsup: to blacklist. 
-            \n[Jump to message](https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id})
-            \nsha256: {imageSHA256}\nphash: {imagePerceptual}
-            """ 
-            msgID = await sendMessage(SERVER_ID, CHANNEL_ID, msg)
+            if not foundMatch:
+                logger.info(f"Image has been posted in {message.channel.name} by {message.author.name} sha256: {imageSHA256}")
+                msg = f"""
+                Image has been posted in {message.channel.name} by {message.author.name} react with :thumbsup: to blacklist. 
+                \n[Jump to message](https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id})
+                \nsha256: {imageSHA256}
+                """ 
+                msgID = await sendMessage(SERVER_ID, CHANNEL_ID, msg)
 
-            pendingChecksDict[str(msgID)] = {
-                "sha256" : imageSHA256,
-                "phash" : imagePerceptual,
-                "embedding" : imageEmb.tolist(),
-                "time" : datetime.utcnow().isoformat(),
-                "messageID" : message.id,
-                "channelID" : message.channel.id,
-            }
-            return
-
-
-    
+                pendingChecksDict[str(msgID)] = {
+                    "sha256" : imageSHA256,
+                    "embedding" : imageEmb.tolist(),
+                    "time" : datetime.utcnow().isoformat(),
+                    "messageID" : message.id,
+                    "channelID" : message.channel.id,
+                }
+                return
 
 @client.event
 async def on_raw_reaction_add(payload):
@@ -331,11 +344,11 @@ async def on_raw_reaction_add(payload):
         if reactMessageID in pendingChecksDict.keys():
 
             if not user.guild_permissions.administrator:
-                await interaction.response.send_message("You're not an administrator.", ephemeral=False)
+                await sendMessage(SERVER_ID, CHANNEL_ID,"You're not an administrator.")
                 logger.warning(f"{user.name} attempted to approve a image ban but aren't administrator.")
                 return
 
-            await sendMessage(SERVER_ID, CHANNEL_ID, "Added image to banned list.") 
+            await sendMessage(SERVER_ID, CHANNEL_ID, "Added image to banned list.") #TODO move this at the end of the processing to allow displaying of errors.
 
             pendingData = pendingChecksDict[reactMessageID]
 
@@ -345,7 +358,7 @@ async def on_raw_reaction_add(payload):
                 await offendingMessage.delete()
                 
                 pendingSHA256 = pendingData["sha256"]
-                databaseManager.add(pendingSHA256, pendingData["phash"], np.array(pendingData["embedding"], dtype=np.float32))
+                databaseManager.add(pendingSHA256, np.array(pendingData["embedding"], dtype=np.float32))
                     
                 logger.info(f"{user.name} has banned an image. sha256: {pendingSHA256}")
             else:
@@ -355,7 +368,7 @@ async def on_raw_reaction_add(payload):
 
         if reactMessageID in pendingBansDict.keys():
             if not user.guild_permissions.administrator:
-                await interaction.response.send_message("You're not an administrator.", ephemeral=False)
+                await sendMessage(SERVER_ID, CHANNEL_ID, "You're not an administrator.")
                 logger.warning(f"{user.name} attempted to approve a ban but aren't administrator.")
                 return
 
