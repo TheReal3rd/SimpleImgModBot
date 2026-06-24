@@ -24,7 +24,7 @@ class DatabaseManager:
         # cosine similarity index
         self.index = faiss.IndexFlatIP(self.embedding_dim)
         self.sha_map = []
-        self.rebuild_index()
+        self.rebuildIndex()
 
     @staticmethod
     def _serialize_embedding(embedding: np.ndarray) -> bytes:
@@ -90,7 +90,7 @@ class DatabaseManager:
         )
         return self.cursor.fetchone()[0]
 
-    def fetch_all(self):
+    def fetchAll(self):
         self.cursor.execute("""
         SELECT
             sha256,
@@ -147,7 +147,21 @@ class DatabaseManager:
 
         return results
 
-    def rebuild_index(self):
+    def deleteEntry(self, sha256: str):
+        dbSizeBefore = self.count()
+
+        self.cursor.execute("""
+        DELETE FROM fingerprints WHERE sha256 = ?
+        """, (sha256,))
+        self.conn.commit()
+
+        return {
+            "before" : dbSizeBefore,
+            "after" : self.count()
+        }
+
+
+    def rebuildIndex(self):
         self.index = faiss.IndexFlatIP(self.embedding_dim)
         self.sha_map = []
 

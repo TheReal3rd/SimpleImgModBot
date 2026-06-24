@@ -29,6 +29,7 @@ if __name__ != "__main__":
 #Utils funcs.
 MSG_LEN_LIMIT = 2000
 EMBED_LEN_LIMIT = 4095
+SHA256_CHAR_LEN = 64
 IMG_EXTENSIONS = [".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff", ".tif", ".heic", ".heif", ".avif", ".jfif",] 
 # Few formats aren't included due to not working with current set up nor scope.
 
@@ -103,6 +104,19 @@ def fetchLogs():
         result.append(f"{record.created} | {record.getMessage()}")
     return result
 
+#Config const's and load.
+DEFAULT_CONFIG = {
+    "ServerID" : "",
+    "ChannelID" : "",
+    "Token" : "",
+    "Embedding_Threshold" : 0.87,
+    "Debug" : True,
+    "CLIP_Processor" : "auto",
+}
+configDict = {}
+configDict = readJson(CONFIG_PATH, DEFAULT_CONFIG)
+writeJson(CONFIG_PATH, configDict)
+
 #Logging
 logBuffer = deque(maxlen=500)
 
@@ -118,7 +132,7 @@ consoleHandler = logging.StreamHandler()
 consoleHandler.setFormatter(formatter)
 
 Path("logs").parent.mkdir(parents=True, exist_ok=True)
-timeDateNow = datetime.now(UTC).strftime("%Y-%m-%d_%H-%M-%S-%f")[:-3]
+timeDateNow = datetime.now(UTC).strftime("%Y-%m-%d")
 fileHandler = logging.FileHandler(f"logs/{timeDateNow}-clankerModLog.log", encoding="utf-8")
 fileHandler.setFormatter(formatter)
 
@@ -131,8 +145,13 @@ logger.addHandler(memoryHandler)
 logCleanup("logs")
 
 #CLIP
-
-device = "cuda" if torch.cuda.is_available() else "cpu" # TODO maybe move this to config but obv handle it.
+#Can for CPU Mode or GPU but fall back to CPU if gpu not available.
+match(configDict["CLIP_Processor"]):
+    case "cpu":
+        device = "cpu"
+    case _:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+logger.info(f"CLIP + FAISS device: {device}")
 
 model, preprocess, _ = open_clip.create_model_and_transforms(
     "ViT-B-32",
@@ -157,20 +176,6 @@ def cosineSimilarity(a, b):
     a = np.array(a)
     b = np.array(b)
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
-
-#Config const's and load.
-DEFAULT_CONFIG = {
-    "ServerID" : "",
-    "ChannelID" : "",
-    "Token" : "",
-    "Embedding_Threshold" : 0.87,
-    "Debug" : True,
-    "NumThreads" : 4, #TODO
-}
-
-configDict = {}
-configDict = readJson(CONFIG_PATH, DEFAULT_CONFIG)
-writeJson(CONFIG_PATH, configDict)
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -304,6 +309,7 @@ async def on_message(message):
                     "userID" : message.author.id,
                 }
                 foundMatch = True
+                break
             else:
                 logger.info(f"Embedding search into database...")
                 imageEmb = calcEmbedding(imageBytes)
@@ -350,7 +356,6 @@ async def on_message(message):
                     "messageID" : message.id,
                     "channelID" : message.channel.id,
                 }
-                return
 
 @client.event
 async def on_raw_reaction_add(payload):

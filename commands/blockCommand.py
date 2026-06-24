@@ -14,13 +14,19 @@ async def blockCommand(interaction: discord.Interaction, url: str):
             return
 
         correctStart = url.startswith("http://") or url.startswith("https://")
-        correctEnd = False#TODO actually get this to work.
+
+        if "&" in url:
+            urlSplit = url.split("?")[0]
+        else:
+            urlSplit = url
+
+        correctEnd = False
         for ext in IMG_EXTENSIONS:
-            correctEnd = url.endswith(ext)
+            correctEnd = urlSplit.endswith(ext)
             if correctEnd:
                 break 
 
-        if correctStart:
+        if correctStart and correctEnd:
             import requests
 
             headResponse = requests.head(url)
@@ -39,7 +45,8 @@ async def blockCommand(interaction: discord.Interaction, url: str):
             
             imageSHA256, emb = calcImageHash(imageBytes)
 
-            if imageSHA256 in bannedImageDict.keys():
+            dbCheck = databaseManager.get(imageSHA256)
+            if dbCheck != None:
                 await interaction.response.send_message("The image is already in the banned list...", ephemeral=True)
             else:
                 emoji = discord.utils.get(interaction.guild.emojis, name="ThumbsUp")

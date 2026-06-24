@@ -25,8 +25,6 @@ def writeJson(path, data):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4, ensure_ascii=False)
 
-#Hashing
-
 def getFiles(folderPath, endWithFilter):
     result = []
     for filename in os.listdir(folderPath):
