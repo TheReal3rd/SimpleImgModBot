@@ -28,7 +28,7 @@ from performanceManger import *
 if __name__ != "__main__":
     quit()
 
-global logger, L_Hits
+global logger, L_Hits, hateTimer
 
 #Utils funcs.
 MSG_LEN_LIMIT = 2000
@@ -116,6 +116,7 @@ L_Hits = 0
 
 if configDict["Jokes_Memes"]:
     hitTable["L_Res"] = 0
+    hitTable["L_Halt"] = True
 
 readJson("hits.json", hitTable)
 
@@ -275,12 +276,12 @@ async def getMessage(channelID, messageID):
 
 @client.event
 async def on_message(message):
-    global L_Hits
+    global L_Hits, hateTimer
     if message.author == client.user:
         return
 
     if configDict["Jokes_Memes"]:
-        if L_Hits < MAXIMUM_HITS:
+        if L_Hits < MAXIMUM_HITS and hitTable["L_Halt"]:
             if message.author.id == RESENFOR_ID:
                 await message.add_reaction("\U0001F1F1") # Regional L emoji.
                 L_Hits += 1
