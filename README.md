@@ -6,7 +6,6 @@ Basic discord image banning bot with main goal to prevent and block scam image p
 * Add video hashing too.
 * Finish adding basic supporting functions. 
 * Add ability to scroll backwards in message history to find banned imgs.
-* Move the pending Bans Checks to SQL. with msgID Lookup. 
 
 ## Think about:
 * Possibly multithread queue the messages processing.

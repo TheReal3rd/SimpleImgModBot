@@ -21,10 +21,13 @@ from discord.ext import commands, tasks
 from datetime import datetime, timedelta, UTC
 from collections import deque
 from utils import *
-from databaseManager import *
+from fingerprintDataManager import *
+from pendingDataManager import *
 
 if __name__ != "__main__":
     quit()
+
+global logger
 
 #Utils funcs.
 MSG_LEN_LIMIT = 2000
@@ -33,8 +36,6 @@ SHA256_CHAR_LEN = 64
 IMG_EXTENSIONS = [".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff", ".tif", ".heic", ".heif", ".avif", ".jfif",] 
 # Few formats aren't included due to not working with current set up nor scope.
 
-PEND_CHECKS_PATH = "pendingChecks.json"
-PEND_BANS_PATH = "pendingBans.json"
 CONFIG_PATH = "config.json"
 
 def calcImageHash(imageBytes: bytes):
@@ -47,24 +48,6 @@ def calcSHA256(imageBytes: bytes):
 
 def calcEmbedding(imageBytes: bytes):
     return getEmbedding(imageBytes)
-
-def logCleanup(folderPath):
-    timeDateNow = datetime.now(UTC).strftime("%Y-%m-%d").split("-")
-    for filename in os.listdir(folderPath):
-        filePath = os.path.join(folderPath, filename)
-        if not os.path.isfile(filePath):
-            continue
-
-        if not filename.endswith(".log"):
-            continue
-
-        nameSplit = filename.split("-")
-        monthDiff = abs(int(nameSplit[1]) - int(timeDateNow[1]))
-        yearDiff = abs(int(nameSplit[0]) - int(timeDateNow[0]))
-
-        if yearDiff >= 1 or monthDiff >= 1:
-            logger.info(f"Log cleanup {filename} has been deleted.")
-            os.remove(filePath)
 
 def loadImageFolder(folderPath, configDict):
     for filename in os.listdir(folderPath):
@@ -145,7 +128,7 @@ logger.addHandler(memoryHandler)
 logCleanup("logs")
 
 #CLIP
-#Can for CPU Mode or GPU but fall back to CPU if gpu not available.
+#CPU Mode or GPU but fall back to CPU if GPU not available.
 match(configDict["CLIP_Processor"]):
     case "cpu":
         device = "cpu"
@@ -186,17 +169,10 @@ intents.messages = True
 client = commands.Bot(command_prefix = "!" ,intents=intents)
 
 #Banned image load and hash.
-databaseManager = DatabaseManager()
+databaseManager = FingerprintDataManager()
 loadImageFolder("images", configDict)
 
-# working
-# msgID = sha256, embedding, time and messageObj
-pendingChecksDict = {}
-# msgID = time, userObj
-pendingBansDict = {}
-
-pendingBansDict = readJson(PEND_BANS_PATH)
-pendingChecksDict = readJson(PEND_CHECKS_PATH)
+pendingDatabaseManager = PendingDataManager()
 
 #General Const's
 SERVER_ID = configDict["ServerID"]
@@ -304,10 +280,11 @@ async def on_message(message):
                 msgID = await sendMessage(SERVER_ID, CHANNEL_ID, msg)
                 await message.delete()
 
-                pendingBansDict[str(msgID)] = {
+                pendingDatabaseManager.submitPending(Tables.BANS, {
+                    "msgID" : msgID,
                     "time" : datetime.now(UTC).isoformat(),
                     "userID" : message.author.id,
-                }
+                })
                 foundMatch = True
                 break
             else:
@@ -333,10 +310,11 @@ async def on_message(message):
                         msgID = await sendMessage(SERVER_ID, CHANNEL_ID, msg)
                         await message.delete()
 
-                        pendingBansDict[str(msgID)] = {
+                        pendingDatabaseManager.submitPending(Tables.BANS, {
+                            "msgID" : msgID,
                             "time" : datetime.now(UTC).isoformat(),
                             "userID" : message.author.id,
-                        }
+                        })
                         foundMatch = True
                         break
             
@@ -349,13 +327,15 @@ async def on_message(message):
                 """ 
                 msgID = await sendMessage(SERVER_ID, CHANNEL_ID, msg)
 
-                pendingChecksDict[str(msgID)] = {
+                pendingDatabaseManager.submitPending(Tables.CHECKS, {
+                    "msgID" : msgID,
                     "sha256" : imageSHA256,
-                    "embedding" : imageEmb.tolist(),
+                    "embedding" : imageEmb,
                     "time" : datetime.now(UTC).isoformat(),
                     "messageID" : message.id,
                     "channelID" : message.channel.id,
-                }
+                    "userID" : message.author.id,
+                })
 
 @client.event
 async def on_raw_reaction_add(payload):
@@ -367,7 +347,8 @@ async def on_raw_reaction_add(payload):
 
     if payload.emoji.name == "👍":
 
-        if reactMessageID in pendingChecksDict.keys():
+        result = pendingDatabaseManager.get(Tables.CHECKS, reactMessageID)
+        if result != None:
 
             if not user.guild_permissions.administrator:
                 await sendMessage(SERVER_ID, CHANNEL_ID,"You're not an administrator.")
@@ -376,70 +357,54 @@ async def on_raw_reaction_add(payload):
 
             await sendMessage(SERVER_ID, CHANNEL_ID, "Added image to banned list.") #TODO move this at the end of the processing to allow displaying of errors.
 
-            pendingData = pendingChecksDict[reactMessageID]
-
-            offendingMessage = await getMessage(pendingData["channelID"], pendingData["messageID"])
+            offendingMessage = await getMessage(result["channelID"], result["messageID"])
 
             if offendingMessage:
                 await offendingMessage.delete()
                 
-                pendingSHA256 = pendingData["sha256"]
-                databaseManager.add(pendingSHA256, np.array(pendingData["embedding"], dtype=np.float32))
+                pendingSHA256 = result["sha256"]
+                databaseManager.add(pendingSHA256, np.array(result["embedding"], dtype=np.float32))
                     
                 logger.info(f"{user.name} has banned an image. sha256: {pendingSHA256}")
             else:
                 logger.error("Ran into enternal error trying to delete offending message...")
 
-            del pendingChecksDict[reactMessageID]
+            pendingDatabaseManager.deleteEntry(Tables.CHECKS, reactMessageID)
+            result = None
 
-        if reactMessageID in pendingBansDict.keys():
+        result = pendingDatabaseManager.get(Tables.BANS, reactMessageID)
+        if result != None:
             if not user.guild_permissions.administrator:
                 await sendMessage(SERVER_ID, CHANNEL_ID, "You're not an administrator.")
                 logger.warning(f"{user.name} attempted to approve a ban but aren't administrator.")
                 return
 
-            banData = pendingBansDict[reactMessageID]
-            userObj = await getMember(banData["userID"])
+            userObj = await getMember(result["userID"])
             banResult = await banUser(userObj)
 
             await sendMessage(SERVER_ID, CHANNEL_ID, f"The user will be banned. User: {userObj.name} Success: {banResult}") 
             logger.info(f"{user.name} has banned the user {userObj.name}")
 
-            del pendingBansDict[reactMessageID]
+            pendingDatabaseManager.deleteEntry(Tables.BANS, reactMessageID)
             
 
 @tasks.loop(seconds=60)
 async def update_loop():
-    if len(pendingChecksDict.keys()) != 0:
-        toDelete = []
-        for key in pendingChecksDict.keys():
-            pending = pendingChecksDict[key]
+    for table in Tables:
+        resultList = pendingDatabaseManager.fetchAll(table)
+        if resultList != None and len(resultList) != 0:
+            toDelete = []
+            for pending in resultList:
+                if hasDaysPassed(datetime.fromisoformat(pending["time"]), days=20):
+                    toDelete.append(pending["msgID"])
+                    continue
 
-            if hasDaysPassed(datetime.fromisoformat(pending["time"]), days=20):
-                toDelete.append(key)
-                continue
-
-        if len(toDelete) != 0:
-            for key in toDelete:
-                del pendingChecksDict[key]
-
-    if len(pendingBansDict.keys()) != 0:
-        toDelete = []
-        for key in pendingBansDict.keys():
-            pending = pendingBansDict[key]
-
-            if hasDaysPassed(datetime.fromisoformat(pending["time"]), days=20):
-                toDelete.append(key)
-                continue
-
-        if len(toDelete) != 0:
-            for key in toDelete:
-                del pendingBansDict[key]
-
+            if len(toDelete) != 0:
+                for key in toDelete:
+                    pendingDatabaseManager.deleteEntry(table, key)
 
 try:
     client.run(configDict["Token"])
 finally:
     databaseManager.close()
-    writeJson(PEND_CHECKS_PATH, pendingChecksDict)
-    writeJson(PEND_BANS_PATH, pendingBansDict)
+    pendingDatabaseManager.close()

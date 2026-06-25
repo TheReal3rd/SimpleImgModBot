@@ -13,8 +13,8 @@ async def aboutCommand(interaction: discord.Interaction):
     )
 
     embed.add_field(
-        name="DB Size",
-        value = f"{databaseManager.count()}",
+        name="DB Size's",
+        value = f"HashDB: {databaseManager.count()} Pending: ChecksDB: {pendingDatabaseManager.count(Tables.CHECKS)} BanDB:{pendingDatabaseManager.count(Tables.BANS)}",
         inline = True
     )
 
