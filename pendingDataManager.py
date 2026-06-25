@@ -265,7 +265,10 @@ class PendingDataManager():
         self.conn.close()
 
     def __len__(self):
-        return self.count()
+        total = 0
+        for table in Tables:
+            total += self.count(table)
+        return total
 
 
 if __name__ == "__main__":

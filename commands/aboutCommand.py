@@ -14,27 +14,28 @@ async def aboutCommand(interaction: discord.Interaction):
 
     embed.add_field(
         name="DB Size's",
-        value = f"HashDB: {databaseManager.count()} Pending: ChecksDB: {pendingDatabaseManager.count(Tables.CHECKS)} BanDB:{pendingDatabaseManager.count(Tables.BANS)}",
-        inline = True
+        value = f"HashDB: {databaseManager.count()}\nPending:\n * ChecksDB: {pendingDatabaseManager.count(Tables.CHECKS)}\n * BanDB:{pendingDatabaseManager.count(Tables.BANS)}",
+        inline = False
     )
 
     embed.add_field(
         name="Performance",
-        value = "Not implemented yet.",
-        inline = True
+        value = f"{perfManager.summary()}",
+        inline = False
     )
 
     embed.add_field(
         name="Images Checked",
-        value = "Not implemented yet.",
-        inline = True
+        value = f"{hitTable["Img_Scans"]}",
+        inline = False
     )
 
-    embed.add_field(
-        name="L's given to Resenfor",
-        value = "Not implemented yet.",
-        inline = True
-    )
+    if configDict["Jokes_Memes"]:
+        embed.add_field(
+            name="L's given to Resenfor",
+            value = f"Today:{L_Hits}\nTotal:{hitTable["L_Res"]}",
+            inline = False
+        )
 
     await interaction.response.send_message(embed=embed)
     logger.info(f"{interaction.user.name} Has executed the about command.")

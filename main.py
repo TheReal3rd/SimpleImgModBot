@@ -23,11 +23,12 @@ from collections import deque
 from utils import *
 from fingerprintDataManager import *
 from pendingDataManager import *
+from performanceManger import *
 
 if __name__ != "__main__":
     quit()
 
-global logger
+global logger, L_Hits
 
 #Utils funcs.
 MSG_LEN_LIMIT = 2000
@@ -95,10 +96,31 @@ DEFAULT_CONFIG = {
     "Embedding_Threshold" : 0.87,
     "Debug" : True,
     "CLIP_Processor" : "auto",
+    "Jokes_Memes" : False, # Adding this so if someone does use this they can disable my joke out of the bot. 
 }
 configDict = {}
 configDict = readJson(CONFIG_PATH, DEFAULT_CONFIG)
 writeJson(CONFIG_PATH, configDict)
+
+#statistics
+hitTable = {
+    "Img_Scans" : 0,
+    "Img_Bans" : 0,
+}
+
+#Resenfor Hate :angy: :fist:
+RESENFOR_ID = 332634195941654529
+MAXIMUM_HITS = 30 # So im not constantly oblitarating him.
+hateTimer = datetime.now(UTC)
+L_Hits = 0
+
+if configDict["Jokes_Memes"]:
+    hitTable["L_Res"] = 0
+
+readJson("hits.json", hitTable)
+
+#Perf
+perfManager = PerformanceManager()
 
 #Logging
 logBuffer = deque(maxlen=500)
@@ -107,7 +129,7 @@ class MemoryHandler(logging.Handler):
     def emit(self, record):
         logBuffer.append(record)
 
-logger = logging.getLogger("ClankerMod")
+logger = logging.getLogger("ClankerMod")#TODO look into which lib either FAISS CLIP or torch adding another logger and disable it.
 logger.setLevel(logging.INFO)
 
 formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -239,7 +261,6 @@ async def banUser(user):
         logger.error("Missing required permissions to ban user.")
     return False
 
-
 async def getMessage(channelID, messageID):
     guild = client.get_guild(SERVER_ID)
     if guild is None:
@@ -254,10 +275,25 @@ async def getMessage(channelID, messageID):
 
 @client.event
 async def on_message(message):
+    global L_Hits
     if message.author == client.user:
         return
 
+    if configDict["Jokes_Memes"]:
+        if L_Hits < MAXIMUM_HITS:
+            if message.author.id == RESENFOR_ID:
+                await message.add_reaction("\U0001F1F1") # Regional L emoji.
+                L_Hits += 1
+                hitTable["L_Res"] += 1
+                if L_Hits >= MAXIMUM_HITS:
+                    hateTimer = datetime.now(UTC)
+        else:
+            if datetime.now(UTC) - hateTimer >= timedelta(days=1):
+                L_Hits = 0
+    
     for attachment in message.attachments:
+        hitTable["Img_Scans"] += 1
+        perfManager.begin("IMG SCAN")
         if attachment.content_type and attachment.content_type.startswith("image/"):
             imageBytes = await attachment.read()
             
@@ -286,6 +322,7 @@ async def on_message(message):
                     "userID" : message.author.id,
                 })
                 foundMatch = True
+                perfManager.end("IMG SCAN")
                 break
             else:
                 logger.info(f"Embedding search into database...")
@@ -316,6 +353,7 @@ async def on_message(message):
                             "userID" : message.author.id,
                         })
                         foundMatch = True
+                        perfManager.end("IMG SCAN")
                         break
             
             if not foundMatch:
@@ -336,6 +374,7 @@ async def on_message(message):
                     "channelID" : message.channel.id,
                     "userID" : message.author.id,
                 })
+                perfManager.end("IMG SCAN")
 
 @client.event
 async def on_raw_reaction_add(payload):
@@ -355,10 +394,9 @@ async def on_raw_reaction_add(payload):
                 logger.warning(f"{user.name} attempted to approve a image ban but aren't administrator.")
                 return
 
-            await sendMessage(SERVER_ID, CHANNEL_ID, "Added image to banned list.") #TODO move this at the end of the processing to allow displaying of errors.
-
             offendingMessage = await getMessage(result["channelID"], result["messageID"])
 
+            msg =  "Added image to banned list."
             if offendingMessage:
                 await offendingMessage.delete()
                 
@@ -367,10 +405,17 @@ async def on_raw_reaction_add(payload):
                     
                 logger.info(f"{user.name} has banned an image. sha256: {pendingSHA256}")
             else:
+                msg = "Ran into an error whilst trying to delete the message."
                 logger.error("Ran into enternal error trying to delete offending message...")
 
-            pendingDatabaseManager.deleteEntry(Tables.CHECKS, reactMessageID)
+            deleteResult = pendingDatabaseManager.deleteEntry(Tables.CHECKS, reactMessageID)
             result = None
+
+            if deleteResult["before"] - deleteResult["after"] <= 0:
+                msg = "The pending database has failed to delete the entry."
+                logger.error("The database size comparison hasn't changed possible failure of deleting the pending task.")
+
+            await sendMessage(SERVER_ID, CHANNEL_ID, msg)
 
         result = pendingDatabaseManager.get(Tables.BANS, reactMessageID)
         if result != None:
@@ -387,7 +432,6 @@ async def on_raw_reaction_add(payload):
 
             pendingDatabaseManager.deleteEntry(Tables.BANS, reactMessageID)
             
-
 @tasks.loop(seconds=60)
 async def update_loop():
     for table in Tables:
@@ -403,8 +447,11 @@ async def update_loop():
                 for key in toDelete:
                     pendingDatabaseManager.deleteEntry(table, key)
 
+    writeJson("hits.json", hitTable)
+
 try:
     client.run(configDict["Token"])
 finally:
     databaseManager.close()
     pendingDatabaseManager.close()
+    writeJson("hits.json", hitTable)
