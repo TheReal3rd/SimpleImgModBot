@@ -28,12 +28,13 @@ from performanceManger import *
 if __name__ != "__main__":
     quit()
 
-global logger, L_Hits, hateTimer
+global logger, resLHits, hateTimer
 
 #Utils funcs.
 MSG_LEN_LIMIT = 2000
 EMBED_LEN_LIMIT = 4095
 SHA256_CHAR_LEN = 64
+SCAN_BATCH_SIZE = 30
 IMG_EXTENSIONS = [".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff", ".tif", ".heic", ".heif", ".avif", ".jfif",] 
 # Few formats aren't included due to not working with current set up nor scope.
 
@@ -83,9 +84,9 @@ def loadImageFolder(folderPath, configDict):
             logger.error(f"Failed to process image: {filename} | {e}")
 
 def fetchLogs():
-    result = []
+    result = ""
     for record in logBuffer:
-        result.append(f"{record.created} | {record.getMessage()}")
+        result += (f"{record.getMessage()}\n")
     return result
 
 #Config const's and load.
@@ -102,6 +103,10 @@ configDict = {}
 configDict = readJson(CONFIG_PATH, DEFAULT_CONFIG)
 writeJson(CONFIG_PATH, configDict)
 
+# Processing queue for scans
+scanQueues = {}
+resultQueues = {}
+
 #statistics
 hitTable = {
     "Img_Scans" : 0,
@@ -112,7 +117,7 @@ hitTable = {
 RESENFOR_ID = 332634195941654529
 MAXIMUM_HITS = 30 # So im not constantly oblitarating him.
 hateTimer = datetime.now(UTC)
-L_Hits = 0
+resLHits = 0
 
 if configDict["Jokes_Memes"]:
     hitTable["L_Res"] = 0
@@ -206,8 +211,12 @@ async def on_ready():
     await registerCommands()
 
     logger.info(f'Logged in as {client.user}')
-    if not update_loop.is_running():
-        update_loop.start()
+    if not updateLoop.is_running():
+        updateLoop.start()
+
+    if not scanLoop.is_running():
+        scanLoop.start()
+
 
 async def registerCommands():
     commandFiles = getFiles("commands", "py")
@@ -274,23 +283,44 @@ async def getMessage(channelID, messageID):
     message = await channel.fetch_message(messageID)
     return message
 
+async def getHistory(channel, range):
+    messages = []
+    async for message in channel.history(limit=range):
+        if len(message.attachments) != 0:
+            messages.append(message)
+    return messages
+    
+async def isInteractionAuthorised(interaction: discord.Interaction):
+    if not str(interaction.guild.id) == SERVER_ID:
+        await interaction.response.send_message("This is not the guild i serve.", ephemeral=True)
+        logger.warning(f"Attempted admin command called by: {interaction.user.name} no actions where performed.")
+        return False
+
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("You're not an administrator.", ephemeral=True)
+        logger.warning(f"Attempted admin command called by: {interaction.user.name} no actions where performed.")
+        return False
+
+    return True
+
 @client.event
 async def on_message(message):
-    global L_Hits, hateTimer
+    global resLHits, hateTimer
     if message.author == client.user:
         return
 
     if configDict["Jokes_Memes"]:
-        if L_Hits < MAXIMUM_HITS and hitTable["L_Halt"]:
+        if resLHits < MAXIMUM_HITS and hitTable["L_Halt"]:
             if message.author.id == RESENFOR_ID:
                 await message.add_reaction("\U0001F1F1") # Regional L emoji.
-                L_Hits += 1
+                resLHits += 1
                 hitTable["L_Res"] += 1
-                if L_Hits >= MAXIMUM_HITS:
+                if resLHits >= MAXIMUM_HITS:
                     hateTimer = datetime.now(UTC)
-        else:
-            if datetime.now(UTC) - hateTimer >= timedelta(days=1):
-                L_Hits = 0
+        
+        if datetime.now(UTC) - hateTimer >= timedelta(days=1):
+            resLHits = 0
+            hitTable["L_Halt"] = True ## Hehehe
     
     for attachment in message.attachments:
         hitTable["Img_Scans"] += 1
@@ -329,7 +359,7 @@ async def on_message(message):
                 logger.info(f"Embedding search into database...")
                 imageEmb = calcEmbedding(imageBytes)
                 dbSearchResult = databaseManager.search(imageEmb, 8)
-
+                
                 for resultData in dbSearchResult:
                     embScoreResult = resultData["score"]
                     sha256Result = resultData["sha256"]
@@ -356,6 +386,9 @@ async def on_message(message):
                         foundMatch = True
                         perfManager.end("IMG SCAN")
                         break
+
+                if foundMatch:
+                    break
             
             if not foundMatch:
                 logger.info(f"Image has been posted in {message.channel.name} by {message.author.name} sha256: {imageSHA256}")
@@ -433,8 +466,68 @@ async def on_raw_reaction_add(payload):
 
             pendingDatabaseManager.deleteEntry(Tables.BANS, reactMessageID)
             
+@tasks.loop(seconds=10)
+async def scanLoop():
+    toDelete = []
+    for key in scanQueues.keys():
+
+        msgListSize = len(scanQueues[key])
+        if msgListSize <= 0:
+            msg =  f"Scan completed. {resultQueues[key]} violating images have been found and deleted."
+            logger.info(msg)
+            await sendMessage(SERVER_ID, CHANNEL_ID, msg)
+            toDelete.append(key)
+            break
+
+        for index in range(0, min(SCAN_BATCH_SIZE, msgListSize)):
+            message = scanQueues[key].pop()
+            for attachment in message.attachments:
+                if attachment.content_type and attachment.content_type.startswith("image/"):
+                    imageBytes = await attachment.read()
+                    
+                    imageSHA256 = calcSHA256(imageBytes)
+                    dbFetchSHA = databaseManager.get(imageSHA256)
+
+                    if dbFetchSHA != None and dbFetchSHA["sha256"] == imageSHA256:
+                        timeoutResult = await timeoutUser(message.author)
+                        await message.delete()
+
+                        if not key in resultQueues.keys():
+                            resultQueues[key] = 1
+                        else:
+                            resultQueues[key]+= 1
+
+                        break
+                    else:
+                        imageEmb = calcEmbedding(imageBytes)
+                        dbSearchResult = databaseManager.search(imageEmb, 8)
+
+                        escapeLoop = False
+                        for resultData in dbSearchResult:
+                            embScoreResult = resultData["score"]
+                            sha256Result = resultData["sha256"]
+
+                            embeddingMatch =  embScoreResult >= configDict["EmbeddingThreshold"]
+                            if embeddingMatch:
+                                await message.delete()
+                                escapeLoop = True
+
+                                if not key in resultQueues.keys():
+                                    resultQueues[key] = 1
+                                else:
+                                    resultQueues[key]+= 1
+                                break
+                        if escapeLoop:
+                            break
+    
+    if len(toDelete) != 0:
+        for key in toDelete:
+            del resultQueues[key]
+            del scanQueues[key]
+
+
 @tasks.loop(seconds=60)
-async def update_loop():
+async def updateLoop():
     for table in Tables:
         resultList = pendingDatabaseManager.fetchAll(table)
         if resultList != None and len(resultList) != 0:

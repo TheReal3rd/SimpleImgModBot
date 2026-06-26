@@ -261,6 +261,19 @@ class PendingDataManager():
             "after" : self.count(table)
         }
 
+    def deleteTable(self, table):
+        selectedTable = self.tableIdentify(table)
+        if selectedTable == None:
+            return False
+
+        self.cursor.execute(f"""
+        DELETE FROM {selectedTable};
+        """)
+        self.conn.commit()
+
+        self.cursor.execute("VACUUM;")
+        return True
+
     def close(self):
         self.conn.close()
 

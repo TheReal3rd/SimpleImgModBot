@@ -1,13 +1,11 @@
 
 @client.tree.command(name="react", description="Toggles on and off the react.")
 async def reactToggleCommand(interaction: discord.Interaction):
-    if not str(interaction.guild.id) == SERVER_ID:
-        await interaction.response.send_message("This is not the guild i serve.", ephemeral=True)
-        logger.warning(f"Attempted admin command called by: {interaction.user.name} no actions where performed.")
+    if not isInteractionAuthorised(interaction):
         return
 
-    if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("You're not an administrator.", ephemeral=True)
+    if not configDict["Jokes_Memes"]:
+        await interaction.response.send_message("Jokes and Meme have been disabled.", ephemeral=True)
         logger.warning(f"Attempted admin command called by: {interaction.user.name} no actions where performed.")
         return
 

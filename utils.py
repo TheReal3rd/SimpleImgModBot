@@ -6,7 +6,7 @@ from pathlib import Path
 from datetime import datetime, timedelta, UTC
 
 #Strings
-def limitString(msg, maxLength, end="..."): # TODO maybe check if special characters provide the incorrect sizeing. 
+def limitString(msg, maxLength, end="..."):
     if len(msg) >= maxLength + 2:
         return msg[:maxLength - (len(end) + 3)].rsplit(" ", 1)[0] + end
     return msg
@@ -56,7 +56,7 @@ def logCleanup(folderPath):
 
         nameSplit = filename.split("-")
         monthDiff = abs(int(nameSplit[1]) - int(timeDateNow[1]))
-        yearDiff = abs(int(nameSplit[0]) - int(timeDateNow[0]))
+        yearDiff = abs(int(nameSplit[0]) - int(timeDateNow[0]))#Kinda useless unless the bot sits idle for a whole year with no restarts. But ah should be fine.
 
         if yearDiff >= 1 or monthDiff >= 1:
             logger.info(f"Log cleanup {filename} has been deleted.")

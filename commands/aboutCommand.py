@@ -8,7 +8,7 @@ async def aboutCommand(interaction: discord.Interaction):
 
     embed = discord.Embed (
         title = "About",
-        description = "This bot is dedicated to prevent spam posting of scam and unwanted images.",
+        description = "This bot is dedicated to stopping spam posting of unwanted and scam images.",
         color=discord.Color.red()
     )
 
@@ -33,9 +33,11 @@ async def aboutCommand(interaction: discord.Interaction):
     if configDict["Jokes_Memes"]:
         embed.add_field(
             name="L's given to Resenfor",
-            value = f"Today:{L_Hits}\nTotal:{hitTable["L_Res"]}",
+            value = f"Today:{resLHits}\nTotal:{hitTable["L_Res"]}",
             inline = False
         )
+
+    embed.set_footer(text="4d61646520627920337264")
 
     await interaction.response.send_message(embed=embed)
     logger.info(f"{interaction.user.name} Has executed the about command.")

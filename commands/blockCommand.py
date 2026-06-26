@@ -2,15 +2,7 @@
 @client.tree.command(name="blockimg", description="Add an img to the block list.")
 @app_commands.describe(url="The URL to the image to add to the ban list.")
 async def blockCommand(interaction: discord.Interaction, url: str):
-
-        if not str(interaction.guild.id) == SERVER_ID:
-            await interaction.response.send_message("This is not the guild i serve.", ephemeral=True)
-            logger.warning(f"Attempted admin command called by: {interaction.user.name} no actions where performed.")
-            return
-
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("You're not an administrator.", ephemeral=True)
-            logger.warning(f"Attempted admin command called by: {interaction.user.name} no actions where performed.")
+        if not isInteractionAuthorised(interaction):
             return
 
         correctStart = url.startswith("http://") or url.startswith("https://")
