@@ -4,6 +4,7 @@ pendingChecks.json
 images/*
 logs/*
 pending.db
+hits.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
