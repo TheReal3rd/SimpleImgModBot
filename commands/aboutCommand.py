@@ -14,7 +14,7 @@ async def aboutCommand(interaction: discord.Interaction):
 
     embed.add_field(
         name="DB Size's",
-        value = f"HashDB: {databaseManager.count()}\nPending:\n * ChecksDB: {pendingDatabaseManager.count(Tables.CHECKS)}\n * BanDB:{pendingDatabaseManager.count(Tables.BANS)}",
+        value = f"HashDB: {databaseManager.count()}\nPending:\n * ChecksDB: {pendingDatabaseManager.count(Tables.CHECKS)}\n * BanDB: {pendingDatabaseManager.count(Tables.BANS)}",
         inline = False
     )
 
@@ -33,7 +33,7 @@ async def aboutCommand(interaction: discord.Interaction):
     if configDict["Jokes_Memes"]:
         embed.add_field(
             name="L's given to Resenfor",
-            value = f"Today:{resLHits}\nTotal:{hitTable["L_Res"]}",
+            value = f"Today: {resLHits}\nTotal: {hitTable["L_Res"]}",
             inline = False
         )
 
