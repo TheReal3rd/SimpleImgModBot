@@ -123,7 +123,7 @@ if configDict["Jokes_Memes"]:
     hitTable["L_Res"] = 0
     hitTable["L_Halt"] = True
 
-readJson("hits.json", hitTable)
+hitTable = readJson("hits.json", hitTable)
 
 #Perf
 perfManager = PerformanceManager()
