@@ -1,7 +1,7 @@
 
 @client.tree.command(name="logs", description="Provides the most recent logger reports")
 async def logsCommand(interaction: discord.Interaction):
-    if not isInteractionAuthorised(interaction):
+    if not await isInteractionAuthorised(interaction):
         return
 
     logMsg = limitString(fetchLogs(), EMBED_LEN_LIMIT)

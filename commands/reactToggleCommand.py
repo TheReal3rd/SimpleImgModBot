@@ -1,7 +1,7 @@
 
 @client.tree.command(name="react", description="Toggles on and off the react.")
 async def reactToggleCommand(interaction: discord.Interaction):
-    if not isInteractionAuthorised(interaction):
+    if not await isInteractionAuthorised(interaction):
         return
 
     if not configDict["Jokes_Memes"]:

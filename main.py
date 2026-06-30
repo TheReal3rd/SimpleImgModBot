@@ -20,6 +20,7 @@ from discord import app_commands
 from discord.ext import commands, tasks
 from datetime import datetime, timedelta, UTC
 from collections import deque
+
 from utils import *
 from fingerprintDataManager import *
 from pendingDataManager import *
@@ -41,9 +42,7 @@ IMG_EXTENSIONS = [".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff", ".tif", ".h
 CONFIG_PATH = "config.json"
 
 def calcImageHash(imageBytes: bytes):
-    sha = hashlib.sha256(imageBytes).hexdigest()
-    emb = getEmbedding(imageBytes)
-    return (sha, emb)
+    return (calcSHA256(imageBytes), calcEmbedding(imageBytes))
 
 def calcSHA256(imageBytes: bytes):
     return hashlib.sha256(imageBytes).hexdigest()
@@ -86,7 +85,7 @@ def loadImageFolder(folderPath, configDict):
 def fetchLogs():
     result = ""
     for record in logBuffer:
-        result += (f"{record.getMessage()}\n")
+        result += (f"{record.getMessage()}\n") #TODO think of away to display the further to last message up. As it shows oldest to latest however get cut off.
     return result
 
 #Config const's and load.
@@ -98,6 +97,7 @@ DEFAULT_CONFIG = {
     "Debug" : True,
     "CLIP_Processor" : "auto",
     "Jokes_Memes" : False, # Adding this so if someone does use this they can disable my joke out of the bot. 
+    "Required_Role_ID" : "", #role id. Replace this with one for your server.
 }
 configDict = {}
 configDict = readJson(CONFIG_PATH, DEFAULT_CONFIG)
@@ -183,11 +183,6 @@ def getEmbedding(imageBytes):
     emb = emb / emb.norm(dim=-1, keepdim=True)
     return emb.cpu().numpy().astype("float32")[0]
 
-def cosineSimilarity(a, b):
-    a = np.array(a)
-    b = np.array(b)
-    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
-
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
@@ -213,9 +208,6 @@ async def on_ready():
     logger.info(f'Logged in as {client.user}')
     if not updateLoop.is_running():
         updateLoop.start()
-
-    if not scanLoop.is_running():
-        scanLoop.start()
 
 
 async def registerCommands():
@@ -320,7 +312,7 @@ async def on_message(message):
         
         if datetime.now(UTC) - hateTimer >= timedelta(days=1):
             resLHits = 0
-            hitTable["L_Halt"] = True ## Hehehe
+            #hitTable["L_Halt"] = True ## Hehehe. So boring.
     
     for attachment in message.attachments:
         hitTable["Img_Scans"] += 1
@@ -466,8 +458,9 @@ async def on_raw_reaction_add(payload):
 
             pendingDatabaseManager.deleteEntry(Tables.BANS, reactMessageID)
             
-@tasks.loop(seconds=10)
+@tasks.loop(seconds=5)
 async def scanLoop():
+    finished = False
     toDelete = []
     for key in scanQueues.keys():
 
@@ -477,6 +470,7 @@ async def scanLoop():
             logger.info(msg)
             await sendMessage(SERVER_ID, CHANNEL_ID, msg)
             toDelete.append(key)
+            finished = True
             break
 
         for index in range(0, min(SCAN_BATCH_SIZE, msgListSize)):
@@ -525,6 +519,9 @@ async def scanLoop():
             del resultQueues[key]
             del scanQueues[key]
 
+    if finished:
+        logger.info("Scanner loop stopping...")
+        scanLoop.stop()
 
 @tasks.loop(seconds=60)
 async def updateLoop():
@@ -542,6 +539,18 @@ async def updateLoop():
                     pendingDatabaseManager.deleteEntry(table, key)
 
     writeJson("hits.json", hitTable)
+
+class MyView(discord.ui.View):##TODO move to a secondary file create a ban, blacklist and more buttons to move away from react to button confirms.
+
+    def __init__(self, testData):
+        super().__init__(timeout=30)
+        self.testData = testData
+
+    @discord.ui.button(label="Click me", style=discord.ButtonStyle.primary)
+    async def button_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message(f"You clicked the button! {self.testData}", ephemeral=True)
+        self.stop()
+
 
 try:
     client.run(configDict["Token"])

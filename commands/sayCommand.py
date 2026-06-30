@@ -2,7 +2,7 @@
 @client.tree.command(name="say", description="Make the bot say something.")
 @app_commands.describe(say="The message you want the bot to say.")
 async def pardonCommand(interaction: discord.Interaction, say: str):#TODO add a filter so people don't make it saying slurs or executing further commands.
-    if not isInteractionAuthorised(interaction):
+    if not await isInteractionAuthorised(interaction):
         return
 
     if not isinstance(say, str) and say.startswith("/"):

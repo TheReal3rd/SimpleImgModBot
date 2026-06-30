@@ -2,7 +2,7 @@
 @client.tree.command(name="pardonimg", description="Remove a image from the banned list using the SHA256.")
 @app_commands.describe(pardonsha="The SHA256 to remove the image from the database.")
 async def pardonCommand(interaction: discord.Interaction, pardonsha: str):
-    if not isInteractionAuthorised(interaction):
+    if not await isInteractionAuthorised(interaction):
         return
 
     expectedLength = len(pardonsha) == SHA256_CHAR_LEN
