@@ -2,7 +2,7 @@
 @client.tree.command(name="rolescan", description="Scans the server's member list for members who're missing required roles.")
 @app_commands.describe(maxlimit="The max number members to be within the list to return the results table.")
 async def scanCommand(interaction: discord.Interaction, maxlimit: int = 0):
-    if not await isInteractionAuthorised(interaction):
+    if not await isInteractionAuthorised(interaction, SERVER_ID):
         return
 
     guild = client.get_guild(SERVER_ID)

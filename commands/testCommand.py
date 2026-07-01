@@ -1,7 +1,7 @@
 
 @client.tree.command(name="test", description="Just a command to test things.")
 async def testCommand(interaction: discord.Interaction):
-    if not await isInteractionAuthorised(interaction):
+    if not await isInteractionAuthorised(interaction, SERVER_ID):
         return
 
     view = MyView("This is a param test")

@@ -1,7 +1,7 @@
 
 @client.tree.command(name="help", description="Provides details about the bot and commands.")
 async def helpCommand(interaction: discord.Interaction):
-    if not await isInteractionAuthorised(interaction):
+    if not await isInteractionAuthorised(interaction, SERVER_ID):
         return
 
     FORMAT_TEMPLATE = "{name} - {description}\n"

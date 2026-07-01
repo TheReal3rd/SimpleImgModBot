@@ -10,6 +10,4 @@ async def helloCommand(interaction: discord.Interaction):
             )
             return
     
-    await interaction.response.send_message(
-        f"Hello, {interaction.user.mention}!"
-    )
+    await interaction.response.send_message(f"Hello, {interaction.user.mention}!")

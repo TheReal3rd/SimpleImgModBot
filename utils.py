@@ -43,8 +43,7 @@ def getFiles(folderPath, endWithFilter):
 def hasDaysPassed(startTime, days=1):
     return datetime.now(UTC) >= startTime + timedelta(days=days)
 
-def logCleanup(folderPath):
-    global logger
+def logCleanup(logger, folderPath):
     timeDateNow = datetime.now(UTC).strftime("%Y-%m-%d").split("-")
     for filename in os.listdir(folderPath):
         filePath = os.path.join(folderPath, filename)

@@ -1,7 +1,7 @@
 
 @client.tree.command(name="react", description="Toggles on and off the react.")
 async def reactToggleCommand(interaction: discord.Interaction):
-    if not await isInteractionAuthorised(interaction):
+    if not await isInteractionAuthorised(interaction, SERVER_ID):
         return
 
     if not configDict["Jokes_Memes"]:
@@ -10,6 +10,7 @@ async def reactToggleCommand(interaction: discord.Interaction):
         return
 
     hitTable["L_Halt"] = not hitTable["L_Halt"]
+    writeJson("hits.json", hitTable)
 
     msg = f"Resenfor L reaction toggled to: {hitTable["L_Halt"]}"
     await interaction.response.send_message(msg)

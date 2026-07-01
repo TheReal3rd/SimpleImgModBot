@@ -7,6 +7,7 @@ Basic discord image banning bot with main goal to prevent and block scam image p
 * Move the update loop for scans to a thread with waiting to limit number of requests.
 * Create a multithreading manager to throw tasks to.
 * self cleanup if an pending task message has expired delete it. so it cleans up and declutters the channel.
+* **Priority create a global data section to be used across all modules for ease.** 
 
 ## Think about:
 * Possibly multithread queue the messages processing.

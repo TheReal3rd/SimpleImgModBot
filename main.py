@@ -25,11 +25,13 @@ from utils import *
 from fingerprintDataManager import *
 from pendingDataManager import *
 from performanceManger import *
+from actionsViews import *
+from discordUtils import *
 
 if __name__ != "__main__":
     quit()
 
-global logger, resLHits, hateTimer
+global logger, resLHits, hateTimer, hitTable
 
 #Utils funcs.
 MSG_LEN_LIMIT = 2000
@@ -153,7 +155,7 @@ logger.addHandler(fileHandler)
 logger.addHandler(consoleHandler)
 logger.addHandler(memoryHandler)
 
-logCleanup("logs")
+logCleanup(logger, "logs")
 
 #CLIP
 #CPU Mode or GPU but fall back to CPU if GPU not available.
@@ -222,79 +224,6 @@ async def registerCommands():
     client.tree.copy_global_to(guild=guild)
     await client.tree.sync(guild=guild)
 
-async def sendMessage(serverID, channelID, message):
-    guild = client.get_guild(serverID)
-    if not guild:
-        guild = await client.fetch_guild(serverID)
-
-    channel = guild.get_channel(channelID)
-    if not channel:
-        channel = await client.fetch_channel(channelID)
-
-    msg = await channel.send(message)
-    return msg.id
-
-async def getMember(userID):
-    guild = client.get_guild(SERVER_ID)
-    if guild is None:
-        guild = await client.fetch_guild(SERVER_ID)
-
-    member = guild.get_member(userID)
-    if member is None:
-        member = await guild.fetch_member(userID)
-
-    return member
-
-async def timeoutUser(user):
-    try:
-        await user.timeout(timedelta(days=28), reason = "ClankerMod - Spam / Scam images or banned images posting.")
-        logger.info(f"User has been timedout for 28 days. User: {user.name}")
-        return True
-    except discord.Forbidden:
-        logger.error("Missing required permissions to timeout user.")
-    return False
-
-async def banUser(user):
-    try:
-        await user.ban(reason="ClankerMod - User ban after mod approval.")
-        logger.info(f"User has been banned forever. User: {user.name}")
-        return True
-    except discord.Forbidden:
-        logger.error("Missing required permissions to ban user.")
-    return False
-
-async def getMessage(channelID, messageID):
-    guild = client.get_guild(SERVER_ID)
-    if guild is None:
-        guild = await client.fetch_guild(SERVER_ID)
-
-    channel = guild.get_channel(channelID)
-    if channel is None:
-        channel = await client.fetch_channel(channelID)
-
-    message = await channel.fetch_message(messageID)
-    return message
-
-async def getHistory(channel, range):
-    messages = []
-    async for message in channel.history(limit=range):
-        if len(message.attachments) != 0:
-            messages.append(message)
-    return messages
-    
-async def isInteractionAuthorised(interaction: discord.Interaction):
-    if not str(interaction.guild.id) == SERVER_ID:
-        await interaction.response.send_message("This is not the guild i serve.", ephemeral=True)
-        logger.warning(f"Attempted admin command called by: {interaction.user.name} no actions where performed.")
-        return False
-
-    if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("You're not an administrator.", ephemeral=True)
-        logger.warning(f"Attempted admin command called by: {interaction.user.name} no actions where performed.")
-        return False
-
-    return True
-
 @client.event
 async def on_message(message):
     global resLHits, hateTimer
@@ -336,7 +265,7 @@ async def on_message(message):
                 \nTimeout success: {timeoutResult} 
                 \nReact with :thumbsup: to ban the user.
                 """
-                msgID = await sendMessage(SERVER_ID, CHANNEL_ID, msg)
+                msgID = await sendMessage(client, SERVER_ID, CHANNEL_ID, msg)
                 await message.delete()
 
                 pendingDatabaseManager.submitPending(Tables.BANS, {
@@ -367,7 +296,7 @@ async def on_message(message):
                         \nTimeout success: {timeoutResult} 
                         \nReact with :thumbsup: to ban the user.
                         """
-                        msgID = await sendMessage(SERVER_ID, CHANNEL_ID, msg)
+                        msgID = await sendMessage(client, SERVER_ID, CHANNEL_ID, msg)
                         await message.delete()
 
                         pendingDatabaseManager.submitPending(Tables.BANS, {
@@ -389,7 +318,8 @@ async def on_message(message):
                 \n[Jump to message](https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id})
                 \nsha256: {imageSHA256}
                 """ 
-                msgID = await sendMessage(SERVER_ID, CHANNEL_ID, msg)
+                confirmButtonView = BanImageView(client, SERVER_ID, pendingDatabaseManager, databaseManager)
+                msgID = await sendMessage(client, SERVER_ID, CHANNEL_ID, msg, view=confirmButtonView)
 
                 pendingDatabaseManager.submitPending(Tables.CHECKS, {
                     "msgID" : msgID,
@@ -404,7 +334,7 @@ async def on_message(message):
 
 @client.event
 async def on_raw_reaction_add(payload):
-    user = await getMember(payload.user_id)
+    user = await getMember(client, SERVER_ID, payload.user_id)
     reactMessageID = str(payload.message_id)
 
     if user.bot:
@@ -416,11 +346,11 @@ async def on_raw_reaction_add(payload):
         if result != None:
 
             if not user.guild_permissions.administrator:
-                await sendMessage(SERVER_ID, CHANNEL_ID,"You're not an administrator.")
+                await sendMessage(client, SERVER_ID, CHANNEL_ID,"You're not an administrator.")
                 logger.warning(f"{user.name} attempted to approve a image ban but aren't administrator.")
                 return
 
-            offendingMessage = await getMessage(result["channelID"], result["messageID"])
+            offendingMessage = await getMessage(client, SERVER_ID, result["channelID"], result["messageID"])
 
             msg =  "Added image to banned list."
             if offendingMessage:
@@ -437,23 +367,23 @@ async def on_raw_reaction_add(payload):
             deleteResult = pendingDatabaseManager.deleteEntry(Tables.CHECKS, reactMessageID)
             result = None
 
-            if deleteResult["before"] - deleteResult["after"] <= 0:
+            if not deleteResult["before"] > deleteResult["after"]:
                 msg = "The pending database has failed to delete the entry."
                 logger.error("The database size comparison hasn't changed possible failure of deleting the pending task.")
 
-            await sendMessage(SERVER_ID, CHANNEL_ID, msg)
+            await sendMessage(client, SERVER_ID, CHANNEL_ID, msg)
 
         result = pendingDatabaseManager.get(Tables.BANS, reactMessageID)
         if result != None:
             if not user.guild_permissions.administrator:
-                await sendMessage(SERVER_ID, CHANNEL_ID, "You're not an administrator.")
+                await sendMessage(client, SERVER_ID, CHANNEL_ID, "You're not an administrator.")
                 logger.warning(f"{user.name} attempted to approve a ban but aren't administrator.")
                 return
 
-            userObj = await getMember(result["userID"])
+            userObj = await getMember(client, SERVER_ID, result["userID"])
             banResult = await banUser(userObj)
 
-            await sendMessage(SERVER_ID, CHANNEL_ID, f"The user will be banned. User: {userObj.name} Success: {banResult}") 
+            await sendMessage(client, SERVER_ID, CHANNEL_ID, f"The user will be banned. User: {userObj.name} Success: {banResult}") 
             logger.info(f"{user.name} has banned the user {userObj.name}")
 
             pendingDatabaseManager.deleteEntry(Tables.BANS, reactMessageID)
@@ -468,7 +398,7 @@ async def scanLoop():
         if msgListSize <= 0:
             msg =  f"Scan completed. {resultQueues[key]} violating images have been found and deleted."
             logger.info(msg)
-            await sendMessage(SERVER_ID, CHANNEL_ID, msg)
+            await sendMessage(client, SERVER_ID, CHANNEL_ID, msg)
             toDelete.append(key)
             finished = True
             break
