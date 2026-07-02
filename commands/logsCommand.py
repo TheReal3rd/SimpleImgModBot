@@ -1,19 +1,22 @@
 
 @client.tree.command(name="logs", description="Provides the most recent logger reports")
 async def logsCommand(interaction: discord.Interaction):
-    if not await isInteractionAuthorised(interaction, SERVER_ID):
+    if not await isInteractionAuthorised(interaction):
         return
 
-    logMsg = limitString(fetchLogs(), EMBED_LEN_LIMIT)
+    logMSG = fetchLogs()
 
-    if len(logMsg) > EMBED_LEN_LIMIT:
-        await interaction.response.send_message("Ran into an issue.", ephemeral=True)
-        logger.error(f"Failed to limit message log within log command.")
-        return
+    embedLimit = globals.EMBED_LEN_LIMIT
+    if len(logMSG) >= embedLimit:
+        pages = pageString(logMSG, embedLimit)
+        logMSG = pages[len(pages) - 1]
+
+    if len(logMSG) >= embedLimit:
+        logMSG = limitString(logMSG, embedLimit)
 
     embed = discord.Embed (
         title = "Latest Logs",
-        description = logMsg,
+        description = logMSG,
         color=discord.Color.red()
     )
 

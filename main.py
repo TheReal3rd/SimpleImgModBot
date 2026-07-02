@@ -12,6 +12,7 @@ import io
 import os
 import asyncio
 import signal
+import time
 
 from pathlib import Path
 from PIL import Image
@@ -20,6 +21,8 @@ from discord import app_commands
 from discord.ext import commands, tasks
 from datetime import datetime, timedelta, UTC
 from collections import deque
+
+import globals
 
 from utils import *
 from fingerprintDataManager import *
@@ -31,58 +34,17 @@ from discordUtils import *
 if __name__ != "__main__":
     quit()
 
-global logger, resLHits, hateTimer, hitTable
-
-#Utils funcs.
-MSG_LEN_LIMIT = 2000
-EMBED_LEN_LIMIT = 4095
-SHA256_CHAR_LEN = 64
-SCAN_BATCH_SIZE = 30
-IMG_EXTENSIONS = [".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff", ".tif", ".heic", ".heif", ".avif", ".jfif",] 
-# Few formats aren't included due to not working with current set up nor scope.
-
-CONFIG_PATH = "config.json"
-
 def calcImageHash(imageBytes: bytes):
     return (calcSHA256(imageBytes), calcEmbedding(imageBytes))
+globals.calcImageHashFunc = calcImageHash
 
 def calcSHA256(imageBytes: bytes):
     return hashlib.sha256(imageBytes).hexdigest()
+globals.calcSHA256Func = calcSHA256
 
 def calcEmbedding(imageBytes: bytes):
     return getEmbedding(imageBytes)
-
-def loadImageFolder(folderPath, configDict):
-    for filename in os.listdir(folderPath):
-        filePath = os.path.join(folderPath, filename)
-        if not os.path.isfile(filePath):
-            continue
-
-        correctFormat = False
-        for ext in IMG_EXTENSIONS:
-            if filename.endswith(ext):
-                correctFormat = True
-                break
-
-        if not correctFormat:
-            continue
-
-        try:
-            imageData = None
-            with open(filePath, "rb") as f:
-                imageData = f.read()
-
-            sha, emb = calcImageHash(imageData)
-            if databaseManager.add(sha, emb):
-                logger.info(f"Image added to database: {filename}")
-
-                if not configDict["Debug"]:#To prevent images being deleted and lost while in development.
-                    os.remove(filePath)
-                    logger.warning(f"Image deleted {filePath}")
-            else:
-                logger.warning(f"Failed to add {filename} to the database...")
-        except Exception as e:
-            logger.error(f"Failed to process image: {filename} | {e}")
+globals.calcEmbeddingFunc = calcEmbedding
 
 def fetchLogs():
     result = ""
@@ -91,23 +53,14 @@ def fetchLogs():
     return result
 
 #Config const's and load.
-DEFAULT_CONFIG = {
-    "ServerID" : "",
-    "ChannelID" : "",
-    "Token" : "",
-    "Embedding_Threshold" : 0.87,
-    "Debug" : True,
-    "CLIP_Processor" : "auto",
-    "Jokes_Memes" : False, # Adding this so if someone does use this they can disable my joke out of the bot. 
-    "Required_Role_ID" : "", #role id. Replace this with one for your server.
-}
-configDict = {}
-configDict = readJson(CONFIG_PATH, DEFAULT_CONFIG)
-writeJson(CONFIG_PATH, configDict)
+
+globals.configDict = readJson(globals.CONFIG_PATH, globals.DEFAULT_CONFIG)
+writeJson(globals.CONFIG_PATH, globals.configDict)
 
 # Processing queue for scans
 scanQueues = {}
 resultQueues = {}
+purgeQueues = {}
 
 #statistics
 hitTable = {
@@ -116,12 +69,11 @@ hitTable = {
 }
 
 #Resenfor Hate :angy: :fist:
-RESENFOR_ID = 332634195941654529
 MAXIMUM_HITS = 30 # So im not constantly oblitarating him.
 hateTimer = datetime.now(UTC)
 resLHits = 0
 
-if configDict["Jokes_Memes"]:
+if globals.configDict["Jokes_Memes"]:
     hitTable["L_Res"] = 0
     hitTable["L_Halt"] = True
 
@@ -138,6 +90,7 @@ class MemoryHandler(logging.Handler):
         logBuffer.append(record)
 
 logger = logging.getLogger("ClankerMod")#TODO look into which lib either FAISS CLIP or torch adding another logger and disable it.
+globals.logger = logger
 logger.setLevel(logging.INFO)
 
 formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -155,11 +108,11 @@ logger.addHandler(fileHandler)
 logger.addHandler(consoleHandler)
 logger.addHandler(memoryHandler)
 
-logCleanup(logger, "logs")
+logCleanup("logs")
 
 #CLIP
 #CPU Mode or GPU but fall back to CPU if GPU not available.
-match(configDict["CLIP_Processor"]):
+match(globals.configDict["CLIP_Processor"]):
     case "cpu":
         device = "cpu"
     case _:
@@ -192,16 +145,19 @@ intents.reactions = True
 intents.messages = True 
 
 client = commands.Bot(command_prefix = "!" ,intents=intents)
+globals.client = client
 
 #Banned image load and hash.
 databaseManager = FingerprintDataManager()
-loadImageFolder("images", configDict)
+globals.databaseManager = databaseManager
+loadImageFolder("images")
 
 pendingDatabaseManager = PendingDataManager()
+globals.pendingDatabaseManager = pendingDatabaseManager
 
 #General Const's
-SERVER_ID = configDict["ServerID"]
-CHANNEL_ID = configDict["ChannelID"]
+globals.SERVER_ID = globals.configDict["ServerID"]
+globals.CHANNEL_ID = globals.configDict["ChannelID"]
 
 @client.event
 async def on_ready():
@@ -220,7 +176,7 @@ async def registerCommands():
             exec(code)
             logger.info(f"Command loaded: {file}")
 
-    guild = discord.Object(id=SERVER_ID)
+    guild = discord.Object(id=globals.SERVER_ID)
     client.tree.copy_global_to(guild=guild)
     await client.tree.sync(guild=guild)
 
@@ -230,9 +186,9 @@ async def on_message(message):
     if message.author == client.user:
         return
 
-    if configDict["Jokes_Memes"]:
+    if globals.configDict["Jokes_Memes"]:
         if resLHits < MAXIMUM_HITS and hitTable["L_Halt"]:
-            if message.author.id == RESENFOR_ID:
+            if message.author.id == globals.RESENFOR_ID:
                 await message.add_reaction("\U0001F1F1") # Regional L emoji.
                 resLHits += 1
                 hitTable["L_Res"] += 1
@@ -243,6 +199,7 @@ async def on_message(message):
             resLHits = 0
             #hitTable["L_Halt"] = True ## Hehehe. So boring.
     
+    authorUsername = message.author.name
     for attachment in message.attachments:
         hitTable["Img_Scans"] += 1
         perfManager.begin("IMG SCAN")
@@ -260,12 +217,13 @@ async def on_message(message):
                 timeoutResult = await timeoutUser(message.author)
 
                 msg = f"""
-                Image matching in banned list was posted in {message.channel.name} by {message.author.name} 
+                Image matching in banned list was posted in {message.channel.name} by {authorUsername} 
                 \n\nsha256: {imageSHA256}
                 \nTimeout success: {timeoutResult} 
                 \nReact with :thumbsup: to ban the user.
                 """
-                msgID = await sendMessage(client, SERVER_ID, CHANNEL_ID, msg)
+                confirmButtonView = BanUserView(authorUsername)
+                msgID = await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, msg, view= confirmButtonView)
                 await message.delete()
 
                 pendingDatabaseManager.submitPending(Tables.BANS, {
@@ -285,18 +243,19 @@ async def on_message(message):
                     embScoreResult = resultData["score"]
                     sha256Result = resultData["sha256"]
 
-                    embeddingMatch =  embScoreResult >= configDict["EmbeddingThreshold"]
+                    embeddingMatch =  embScoreResult >= globals.configDict["EmbeddingThreshold"]
                     if embeddingMatch:
                         logger.info(f"Embedding search has found a high probability match with score: {embScoreResult}\nsha256:{sha256Result}")
                         timeoutResult = await timeoutUser(message.author)
 
                         msg = f"""
-                        Image matching in banned list was posted in {message.channel.name} by {message.author.name} 
+                        Image matching in banned list was posted in {message.channel.name} by {authorUsername} 
                         \nEmbedding Score: {embScoreResult}
                         \nTimeout success: {timeoutResult} 
                         \nReact with :thumbsup: to ban the user.
                         """
-                        msgID = await sendMessage(client, SERVER_ID, CHANNEL_ID, msg)
+                        confirmButtonView = BanUserView(authorUsername)
+                        msgID = await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, msg, view=confirmButtonView)
                         await message.delete()
 
                         pendingDatabaseManager.submitPending(Tables.BANS, {
@@ -318,8 +277,8 @@ async def on_message(message):
                 \n[Jump to message](https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id})
                 \nsha256: {imageSHA256}
                 """ 
-                confirmButtonView = BanImageView(client, SERVER_ID, pendingDatabaseManager, databaseManager)
-                msgID = await sendMessage(client, SERVER_ID, CHANNEL_ID, msg, view=confirmButtonView)
+                confirmButtonView = BanImageView()
+                msgID = await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, msg, view=confirmButtonView)
 
                 pendingDatabaseManager.submitPending(Tables.CHECKS, {
                     "msgID" : msgID,
@@ -334,7 +293,7 @@ async def on_message(message):
 
 @client.event
 async def on_raw_reaction_add(payload):
-    user = await getMember(client, SERVER_ID, payload.user_id)
+    user = await getMember(globals.SERVER_ID, payload.user_id)
     reactMessageID = str(payload.message_id)
 
     if user.bot:
@@ -346,17 +305,18 @@ async def on_raw_reaction_add(payload):
         if result != None:
 
             if not user.guild_permissions.administrator:
-                await sendMessage(client, SERVER_ID, CHANNEL_ID,"You're not an administrator.")
+                await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID,"You're not an administrator.")
                 logger.warning(f"{user.name} attempted to approve a image ban but aren't administrator.")
                 return
 
-            offendingMessage = await getMessage(client, SERVER_ID, result["channelID"], result["messageID"])
+            offendingMessage = await getMessage(globals.SERVER_ID, result["channelID"], result["messageID"])
 
-            msg =  "Added image to banned list."
+            pendingSHA256 = result["sha256"]
+            
+            msg =  f"Added image to banned list.\nSHA256: {pendingSHA256}"
             if offendingMessage:
                 await offendingMessage.delete()
                 
-                pendingSHA256 = result["sha256"]
                 databaseManager.add(pendingSHA256, np.array(result["embedding"], dtype=np.float32))
                     
                 logger.info(f"{user.name} has banned an image. sha256: {pendingSHA256}")
@@ -371,22 +331,30 @@ async def on_raw_reaction_add(payload):
                 msg = "The pending database has failed to delete the entry."
                 logger.error("The database size comparison hasn't changed possible failure of deleting the pending task.")
 
-            await sendMessage(client, SERVER_ID, CHANNEL_ID, msg)
+            await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, msg)
+
+            messageObj = await getMessage(globals.SERVER_ID, globals.CHANNEL_ID, reactMessageID)
+            if messageObj:
+                await messageObj.delete()
 
         result = pendingDatabaseManager.get(Tables.BANS, reactMessageID)
         if result != None:
             if not user.guild_permissions.administrator:
-                await sendMessage(client, SERVER_ID, CHANNEL_ID, "You're not an administrator.")
+                await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, "You're not an administrator.")
                 logger.warning(f"{user.name} attempted to approve a ban but aren't administrator.")
                 return
 
-            userObj = await getMember(client, SERVER_ID, result["userID"])
+            userObj = await getMember(globals.SERVER_ID, result["userID"])
             banResult = await banUser(userObj)
 
-            await sendMessage(client, SERVER_ID, CHANNEL_ID, f"The user will be banned. User: {userObj.name} Success: {banResult}") 
+            await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, f"The user will be banned. User: {userObj.name} Success: {banResult}") 
             logger.info(f"{user.name} has banned the user {userObj.name}")
 
             pendingDatabaseManager.deleteEntry(Tables.BANS, reactMessageID)
+            
+            messageObj = await getMessage(globals.SERVER_ID, globals.CHANNEL_ID, reactMessageID)
+            if messageObj:
+                await messageObj.delete()
             
 @tasks.loop(seconds=5)
 async def scanLoop():
@@ -398,12 +366,12 @@ async def scanLoop():
         if msgListSize <= 0:
             msg =  f"Scan completed. {resultQueues[key]} violating images have been found and deleted."
             logger.info(msg)
-            await sendMessage(client, SERVER_ID, CHANNEL_ID, msg)
+            await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, msg)
             toDelete.append(key)
             finished = True
             break
 
-        for index in range(0, min(SCAN_BATCH_SIZE, msgListSize)):
+        for index in range(0, min(globals.SCAN_BATCH_SIZE, msgListSize)):
             message = scanQueues[key].pop()
             for attachment in message.attachments:
                 if attachment.content_type and attachment.content_type.startswith("image/"):
@@ -415,6 +383,7 @@ async def scanLoop():
                     if dbFetchSHA != None and dbFetchSHA["sha256"] == imageSHA256:
                         timeoutResult = await timeoutUser(message.author)
                         await message.delete()
+                        time.sleep(1)
 
                         if not key in resultQueues.keys():
                             resultQueues[key] = 1
@@ -431,9 +400,10 @@ async def scanLoop():
                             embScoreResult = resultData["score"]
                             sha256Result = resultData["sha256"]
 
-                            embeddingMatch =  embScoreResult >= configDict["EmbeddingThreshold"]
+                            embeddingMatch =  embScoreResult >= globals.configDict["EmbeddingThreshold"]
                             if embeddingMatch:
                                 await message.delete()
+                                time.sleep(1)
                                 escapeLoop = True
 
                                 if not key in resultQueues.keys():
@@ -453,6 +423,40 @@ async def scanLoop():
         logger.info("Scanner loop stopping...")
         scanLoop.stop()
 
+@tasks.loop(seconds=10)
+async def purgeLoop():
+    finished = False
+    toDelete = []
+    for key in purgeQueues.keys():
+        msgListSize = len(purgeQueues[key])
+        if msgListSize <= 0:
+            msg =  f"Purge completed. {resultQueues[key]} have been deleted."
+            logger.info(msg)
+            await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, msg)
+            toDelete.append(key)
+            finished = True
+            break
+
+        for index in range(0, min(globals.SCAN_BATCH_SIZE, msgListSize)):
+            message = purgeQueues[key].pop()
+            await message.delete()
+            time.sleep(1)
+
+            if not key in resultQueues.keys():
+                resultQueues[key] = 1
+            else:
+                resultQueues[key]+= 1
+
+    if len(toDelete) != 0:
+        for key in toDelete:
+            del resultQueues[key]
+            del purgeQueues[key]
+
+    if finished:
+        logger.info("Purge loop stopping...")
+        purgeLoop.stop()
+
+
 @tasks.loop(seconds=60)
 async def updateLoop():
     for table in Tables:
@@ -470,20 +474,8 @@ async def updateLoop():
 
     writeJson("hits.json", hitTable)
 
-class MyView(discord.ui.View):##TODO move to a secondary file create a ban, blacklist and more buttons to move away from react to button confirms.
-
-    def __init__(self, testData):
-        super().__init__(timeout=30)
-        self.testData = testData
-
-    @discord.ui.button(label="Click me", style=discord.ButtonStyle.primary)
-    async def button_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message(f"You clicked the button! {self.testData}", ephemeral=True)
-        self.stop()
-
-
 try:
-    client.run(configDict["Token"])
+    client.run(globals.configDict["Token"])
 finally:
     databaseManager.close()
     pendingDatabaseManager.close()

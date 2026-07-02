@@ -2,10 +2,10 @@
 @client.tree.command(name="scan", description="Scans the current channel for images that are banned.")
 @app_commands.describe(scanrange="How deep into message history that will be scanned.")
 async def scanCommand(interaction: discord.Interaction, scanrange: int):
-    if not await isInteractionAuthorised(interaction, SERVER_ID):
+    if not await isInteractionAuthorised(interaction):
         return
 
-    messages = await getHistory(interaction.channel, scanrange)
+    messages = await getHistoryWithAttachments(interaction.channel, scanrange)
 
     scanNeeded = False
     if len(messages) <= 0:
@@ -16,6 +16,10 @@ async def scanCommand(interaction: discord.Interaction, scanrange: int):
 
     logger.info(f"History scan called by: {interaction.user.name} {msg}")
     responseMSG = await interaction.response.send_message(msg)
+
+    if responseMSG in scanQueues.keys():
+        logger.warning("Scan already queued...")
+        return
 
     if scanNeeded:
         scanQueues[responseMSG.message_id] = messages

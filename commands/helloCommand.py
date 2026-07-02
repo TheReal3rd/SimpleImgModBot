@@ -1,8 +1,8 @@
 
 @client.tree.command(name="hello", description="Say hello")
 async def helloCommand(interaction: discord.Interaction):
-    if configDict["Jokes_Memes"]:
-        if interaction.user.id == RESENFOR_ID:
+    if globals.configDict["Jokes_Memes"]:
+        if interaction.user.id == globals.RESENFOR_ID:
             resenforNames = ["Smelly", "Stinky", "Low", "Bad", "Ew", "Yuck", "Blah"]
             NAME_LENGTH = len(resenforNames)
             await interaction.response.send_message(

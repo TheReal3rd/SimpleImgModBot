@@ -1,15 +1,38 @@
 import json
 import os
 import random
+import logging
 
 from pathlib import Path
 from datetime import datetime, timedelta, UTC
+
+import globals
+
+logger = logging.getLogger("ClankerMod")
 
 #Strings
 def limitString(msg, maxLength, end="..."):
     if len(msg) >= maxLength + 2:
         return msg[:maxLength - (len(end) + 3)].rsplit(" ", 1)[0] + end
     return msg
+
+def pageString(text, maxLength):
+    lines = text.splitlines(keepends=True)
+    pages = []
+    workingPage = ""
+
+    for line in lines:
+        lineLength = len(line)
+        workPageLength = len(workingPage)
+
+        if len(workingPage) >= maxLength:
+            pages.append(workingPage)
+            workingPage = ""
+
+        else:
+            workingPage += line
+
+    return pages
 
 #Json
 def readJson(path, default=None):
@@ -43,7 +66,7 @@ def getFiles(folderPath, endWithFilter):
 def hasDaysPassed(startTime, days=1):
     return datetime.now(UTC) >= startTime + timedelta(days=days)
 
-def logCleanup(logger, folderPath):
+def logCleanup(folderPath):
     timeDateNow = datetime.now(UTC).strftime("%Y-%m-%d").split("-")
     for filename in os.listdir(folderPath):
         filePath = os.path.join(folderPath, filename)
@@ -60,3 +83,35 @@ def logCleanup(logger, folderPath):
         if yearDiff >= 1 or monthDiff >= 1:
             logger.info(f"Log cleanup {filename} has been deleted.")
             os.remove(filePath)
+
+def loadImageFolder(folderPath):
+    for filename in os.listdir(folderPath):
+        filePath = os.path.join(folderPath, filename)
+        if not os.path.isfile(filePath):
+            continue
+
+        correctFormat = False
+        for ext in globals.IMG_EXTENSIONS:
+            if filename.endswith(ext):
+                correctFormat = True
+                break
+
+        if not correctFormat:
+            continue
+
+        try:
+            imageData = None
+            with open(filePath, "rb") as f:
+                imageData = f.read()
+
+            sha, emb = globals.calcImageHashFunc(imageData)
+            if globals.databaseManager.add(sha, emb):
+                logger.info(f"Image added to database: {filename}")
+
+                if not globals.configDict["Debug"]:#To prevent images being deleted and lost while in development.
+                    os.remove(filePath)
+                    logger.warning(f"Image deleted {filePath}")
+            else:
+                logger.warning(f"Failed to add {filename} to the database...")
+        except Exception as e:
+            logger.error(f"Failed to process image: {filename} | {e}")

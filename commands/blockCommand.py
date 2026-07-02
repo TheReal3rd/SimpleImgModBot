@@ -2,7 +2,7 @@
 @client.tree.command(name="blockimg", description="Add an img to the block list.")
 @app_commands.describe(url="The URL to the image to add to the ban list.")
 async def blockCommand(interaction: discord.Interaction, url: str):
-        if not await isInteractionAuthorised(interaction, SERVER_ID):
+        if not await isInteractionAuthorised(interaction):
             return
 
         correctStart = url.startswith("http://") or url.startswith("https://")
@@ -13,7 +13,7 @@ async def blockCommand(interaction: discord.Interaction, url: str):
             urlSplit = url
 
         correctEnd = False
-        for ext in IMG_EXTENSIONS:
+        for ext in globals.IMG_EXTENSIONS:
             correctEnd = urlSplit.endswith(ext)
             if correctEnd:
                 break 

@@ -2,10 +2,10 @@
 @client.tree.command(name="pardonimg", description="Remove a image from the banned list using the SHA256.")
 @app_commands.describe(pardonsha="The SHA256 to remove the image from the database.")
 async def pardonCommand(interaction: discord.Interaction, pardonsha: str):
-    if not await isInteractionAuthorised(interaction, SERVER_ID):
+    if not await isInteractionAuthorised(interaction):
         return
 
-    expectedLength = len(pardonsha) == SHA256_CHAR_LEN
+    expectedLength = len(pardonsha) == globals.SHA256_CHAR_LEN
 
     if not expectedLength:
         errMsg = "The provided SHA256 didn't meet expected length requirements."
@@ -20,7 +20,7 @@ async def pardonCommand(interaction: discord.Interaction, pardonsha: str):
         return 
 
     sizeChanges = databaseManager.deleteEntry(pardonsha)
-    msg = f"Delete sent to database. Response size changes Before: {sizeChanges["before"]} After: {sizeChanges["after"]}"
+    msg = f"Delete sent to database. Response size changes Success: {sizeChanges["before"] > sizeChanges["after"]}"
     logger.info(f"Image has been pardoned by: {interaction.user.name} {msg}")
     await interaction.response.send_message(msg)
     return

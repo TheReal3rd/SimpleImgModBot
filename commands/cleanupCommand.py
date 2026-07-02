@@ -2,7 +2,7 @@
 @client.tree.command(name="cleanup", description="Used to clean up pending checks and bans.")
 @app_commands.describe(table="The name of the table to clean up.")
 async def cleanupCommand(interaction: discord.Interaction, table: str):
-    if not await isInteractionAuthorised(interaction, SERVER_ID):
+    if not await isInteractionAuthorised(interaction):
         return
 
     if table.lower() in Tables:

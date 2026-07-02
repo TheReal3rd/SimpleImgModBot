@@ -2,12 +2,12 @@
 @client.tree.command(name="rolescan", description="Scans the server's member list for members who're missing required roles.")
 @app_commands.describe(maxlimit="The max number members to be within the list to return the results table.")
 async def scanCommand(interaction: discord.Interaction, maxlimit: int = 0):
-    if not await isInteractionAuthorised(interaction, SERVER_ID):
+    if not await isInteractionAuthorised(interaction):
         return
 
-    guild = client.get_guild(SERVER_ID)
+    guild = client.get_guild(globals.SERVER_ID)
     if not guild:
-        guild = await client.fetch_guild(SERVER_ID)
+        guild = await client.fetch_guild(globals.SERVER_ID)
 
     if guild is None:
         msg = "Failed to find the guild?"
@@ -32,7 +32,7 @@ async def scanCommand(interaction: discord.Interaction, maxlimit: int = 0):
             continue
 
         for role in member.roles:
-            if str(role.id) == configDict["Required_Role_ID"]:
+            if str(role.id) == globals.configDict["Required_Role_ID"]:
                 badAccount = False
                 continue 
 
@@ -53,7 +53,7 @@ async def scanCommand(interaction: discord.Interaction, maxlimit: int = 0):
             userData = badUserDict[key]
             msg += f"ID: {key} Name: {userData["name"]} DName: {userData["displayName"]}\n"
 
-        if len(msg) >= EMBED_LEN_LIMIT:
+        if len(msg) >= globals.EMBED_LEN_LIMIT:
             import io
             file = discord.File(
                 fp=io.BytesIO(msg.encode("utf-8")),
