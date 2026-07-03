@@ -35,10 +35,10 @@ async def timeoutUser(user):
         logger.error("Missing required permissions to timeout user.")
     return False
 
-async def banUser(user): # TODO add user who authorised the ban should be listded within the reason.
+async def banUser(user, authorisedUser=""):
     try:
         await user.ban(reason="ClankerMod - User ban after mod approval.")
-        logger.info(f"User has been banned forever. User: {user.name}")
+        logger.info(f"User has been banned forever. User: {user.name} Auth by: {authorisedUser}")
         return True
     except discord.Forbidden:
         logger.error("Missing required permissions to ban user.")
@@ -57,7 +57,7 @@ async def getMember(serverID, userID):
 
     return member
 
-async def sendMessage(serverID, channelID, message, embed = None, view=None):
+async def sendMessage(serverID, channelID, message="", embed = None, view=None):
     guild = globals.client.get_guild(serverID)
     if not guild:
         guild = await globals.client.fetch_guild(serverID)

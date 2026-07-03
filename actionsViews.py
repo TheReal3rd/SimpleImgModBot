@@ -54,7 +54,7 @@ class ConfirmView(discord.ui.View):
     async def confirmCallback(self, interaction: discord.Interaction, button: discord.ui.Button):
         user = interaction.user
         reactMessageID = self.msgID
-        
+
         match(self.pendingType): 
             case globals.PendingType.IMAGE_BAN: # IMAGE BANS
                 result = globals.pendingDatabaseManager.get("checks", reactMessageID)
@@ -99,7 +99,7 @@ class ConfirmView(discord.ui.View):
                         return
 
                     userObj = await getMember(globals.SERVER_ID, result["userID"])
-                    banResult = await banUser(userObj)
+                    banResult = await banUser(userObj, user.name)
 
                     await interaction.response.send_message( f"The user will be banned. User: {userObj.name} Success: {banResult}") 
                     logger.info(f"{user.name} has banned the user {userObj.name}")
@@ -107,6 +107,9 @@ class ConfirmView(discord.ui.View):
                     globals.pendingDatabaseManager.deleteEntry("bans", reactMessageID)
 
                     await interaction.message.delete()
+            
+            case globals.PendingType.ROLE_USER_BAN:
+                pass # TODO think about how this would be done.
 
         self.stop()
 

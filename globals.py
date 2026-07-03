@@ -26,11 +26,23 @@ DEFAULT_CONFIG = {
     "Required_Role_ID" : "", #role id. Replace this with one for your server.
 }
 
+ABT_MSG = [
+    "4d61646520627920337264",
+    "Resenfor Smells.",
+    "Dargo is a cutie pie! :3",
+    "Andromeda show me ur package.",
+    "Tin Tin is a cootie. :3",
+    "Resenfor is sometimes cute.",
+    "E",
+    "3.1415926535",
+]
+
 #General
 client = None
 logger = None
 databaseManager = None
 pendingDatabaseManager = None
+perfManager = None
 configDict = {}
 
 #global Funcs
@@ -42,3 +54,4 @@ calcEmbeddingFunc = None
 class PendingType(StrEnum):
     IMAGE_BAN = "imageBan"
     USER_BAN = "userBan"
+    ROLE_USER_BAN = "roleUserBan"

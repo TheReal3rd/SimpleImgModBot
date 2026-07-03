@@ -20,7 +20,7 @@ async def aboutCommand(interaction: discord.Interaction):
 
     embed.add_field(
         name="Performance",
-        value = f"{perfManager.summary()}",
+        value = f"{globals.perfManager.summary()}",
         inline = False
     )
 
@@ -37,7 +37,9 @@ async def aboutCommand(interaction: discord.Interaction):
             inline = False
         )
 
-    embed.set_footer(text="4d61646520627920337264")
+        embed.set_footer(text=globals.ABT_MSG[random.randint(0, len(globals.ABT_MSG) - 1)])
+    else:
+        embed.set_footer(text="Made by 3rd")
 
     await interaction.response.send_message(embed=embed)
     logger.info(f"{interaction.user.name} Has executed the about command.")

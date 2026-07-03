@@ -49,7 +49,7 @@ globals.calcEmbeddingFunc = calcEmbedding
 def fetchLogs():
     result = ""
     for record in logBuffer:
-        result += (f"{record.getMessage()}\n") #TODO think of away to display the further to last message up. As it shows oldest to latest however get cut off.
+        result += (f"{record.getMessage()}\n")
     return result
 
 #Config const's and load.
@@ -80,7 +80,7 @@ if globals.configDict["Jokes_Memes"]:
 hitTable = readJson("hits.json", hitTable)
 
 #Perf
-perfManager = PerformanceManager()
+globals.perfManager = PerformanceManager()
 
 #Logging
 logBuffer = deque(maxlen=500)
@@ -167,7 +167,6 @@ async def on_ready():
     if not updateLoop.is_running():
         updateLoop.start()
 
-
 async def registerCommands():
     commandFiles = getFiles("commands", "py")
     for file in commandFiles:
@@ -202,7 +201,7 @@ async def on_message(message):
     authorUsername = message.author.name
     for attachment in message.attachments:
         hitTable["Img_Scans"] += 1
-        perfManager.begin("IMG SCAN")
+        globals.perfManager.begin("IMG SCAN")
         if attachment.content_type and attachment.content_type.startswith("image/"):
             imageBytes = await attachment.read()
             
@@ -216,14 +215,25 @@ async def on_message(message):
 
                 timeoutResult = await timeoutUser(message.author)
 
-                msg = f"""
-                Image matching in banned list was posted in {message.channel.name} by {authorUsername} 
-                \n\nsha256: {imageSHA256}
-                \nTimeout success: {timeoutResult} 
-                \nReact with :thumbsup: to ban the user.
-                """
+                embed = discord.Embed (
+                    title = "Banned Image",
+                    description = f"Image matching in banned list was posted in {message.channel.name} by {authorUsername}.",
+                    color=discord.Color.red()
+                )
+                embed.add_field(
+                    name="SHA256",
+                    value = f"{imageSHA256}",
+                    inline = False
+                )
+                embed.add_field(
+                    name="Timeout Result:",
+                    value = f"{timeoutResult}",
+                    inline = False
+                )
+                embed.set_footer(text="React with 👍 to ban the user")
+
                 confirmButtonView = BanUserView(authorUsername)
-                msgID = await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, msg, view= confirmButtonView)
+                msgID = await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, embed= embed, view= confirmButtonView)
                 await message.delete()
 
                 pendingDatabaseManager.submitPending(Tables.BANS, {
@@ -232,7 +242,7 @@ async def on_message(message):
                     "userID" : message.author.id,
                 })
                 foundMatch = True
-                perfManager.end("IMG SCAN")
+                globals.perfManager.end("IMG SCAN")
                 break
             else:
                 logger.info(f"Embedding search into database...")
@@ -248,14 +258,25 @@ async def on_message(message):
                         logger.info(f"Embedding search has found a high probability match with score: {embScoreResult}\nsha256:{sha256Result}")
                         timeoutResult = await timeoutUser(message.author)
 
-                        msg = f"""
-                        Image matching in banned list was posted in {message.channel.name} by {authorUsername} 
-                        \nEmbedding Score: {embScoreResult}
-                        \nTimeout success: {timeoutResult} 
-                        \nReact with :thumbsup: to ban the user.
-                        """
+                        embed = discord.Embed (
+                            title = "Banned Image",
+                            description = f"Image matching in banned list was posted in {message.channel.name} by {authorUsername}.",
+                            color=discord.Color.red()
+                        )
+                        embed.add_field(
+                            name="Embedding Score",
+                            value = f"{embScoreResult}",
+                            inline = False
+                        )
+                        embed.add_field(
+                            name="Timeout Result:",
+                            value = f"{timeoutResult}",
+                            inline = False
+                        )
+                        embed.set_footer(text="React with 👍 to ban the user")
+
                         confirmButtonView = BanUserView(authorUsername)
-                        msgID = await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, msg, view=confirmButtonView)
+                        msgID = await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, embed=embed, view=confirmButtonView)
                         await message.delete()
 
                         pendingDatabaseManager.submitPending(Tables.BANS, {
@@ -264,7 +285,7 @@ async def on_message(message):
                             "userID" : message.author.id,
                         })
                         foundMatch = True
-                        perfManager.end("IMG SCAN")
+                        globals.perfManager.end("IMG SCAN")
                         break
 
                 if foundMatch:
@@ -272,13 +293,25 @@ async def on_message(message):
             
             if not foundMatch:
                 logger.info(f"Image has been posted in {message.channel.name} by {message.author.name} sha256: {imageSHA256}")
-                msg = f"""
-                Image has been posted in {message.channel.name} by {message.author.name} react with :thumbsup: to blacklist. 
-                \n[Jump to message](https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id})
-                \nsha256: {imageSHA256}
-                """ 
+
+                embed = discord.Embed (
+                    title = "Image posted",
+                    description = f"Image has been posted in {message.channel.name} by {message.author.name}.",
+                    color=discord.Color.green()
+                )
+                embed.add_field(
+                    name="SHA256",
+                    value = f"{imageSHA256}",
+                    inline = False
+                )
+                embed.add_field(
+                    name = "Jump",
+                    value = f"[Jump to message](https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id})"
+                )
+                embed.set_footer(text="React with 👍 to blacklist")
+
                 confirmButtonView = BanImageView()
-                msgID = await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, msg, view=confirmButtonView)
+                msgID = await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, embed= embed, view=confirmButtonView)
 
                 pendingDatabaseManager.submitPending(Tables.CHECKS, {
                     "msgID" : msgID,
@@ -289,7 +322,7 @@ async def on_message(message):
                     "channelID" : message.channel.id,
                     "userID" : message.author.id,
                 })
-                perfManager.end("IMG SCAN")
+                globals.perfManager.end("IMG SCAN")
 
 @client.event
 async def on_raw_reaction_add(payload):
@@ -312,7 +345,7 @@ async def on_raw_reaction_add(payload):
             offendingMessage = await getMessage(globals.SERVER_ID, result["channelID"], result["messageID"])
 
             pendingSHA256 = result["sha256"]
-            
+
             msg =  f"Added image to banned list.\nSHA256: {pendingSHA256}"
             if offendingMessage:
                 await offendingMessage.delete()
@@ -345,7 +378,7 @@ async def on_raw_reaction_add(payload):
                 return
 
             userObj = await getMember(globals.SERVER_ID, result["userID"])
-            banResult = await banUser(userObj)
+            banResult = await banUser(userObj, user.name)
 
             await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, f"The user will be banned. User: {userObj.name} Success: {banResult}") 
             logger.info(f"{user.name} has banned the user {userObj.name}")
@@ -358,6 +391,7 @@ async def on_raw_reaction_add(payload):
             
 @tasks.loop(seconds=5)
 async def scanLoop():
+    globals.perfManager.begin("Scan Loop")
     finished = False
     toDelete = []
     for key in scanQueues.keys():
@@ -422,15 +456,17 @@ async def scanLoop():
     if finished:
         logger.info("Scanner loop stopping...")
         scanLoop.stop()
+    globals.perfManager.stop("Update Loop")
 
 @tasks.loop(seconds=10)
 async def purgeLoop():
+    globals.perfManager.begin("Purge Loop")
     finished = False
     toDelete = []
     for key in purgeQueues.keys():
         msgListSize = len(purgeQueues[key])
         if msgListSize <= 0:
-            msg =  f"Purge completed. {resultQueues[key]} have been deleted."
+            msg =  f"Purge completed. {resultQueues[key]} messages have been deleted."
             logger.info(msg)
             await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, msg)
             toDelete.append(key)
@@ -456,6 +492,8 @@ async def purgeLoop():
         logger.info("Purge loop stopping...")
         purgeLoop.stop()
 
+    globals.perfManager.end("Purge Loop")
+
 
 @tasks.loop(seconds=60)
 async def updateLoop():
@@ -465,6 +503,11 @@ async def updateLoop():
             toDelete = []
             for pending in resultList:
                 if hasDaysPassed(datetime.fromisoformat(pending["time"]), days=20):
+                    logger.info(f"Pending has expired: msgID: {pending["msgID"]}")
+                    messageObj = await getMessage(globals.SERVER_ID, globals.CHANNEL_ID, pending["msgID"])
+                    if messageObj or messageObj != None:# Not exactly sure what the return would be if the message was already deleted... In the event of missing obj.
+                        messageObj.delete()
+
                     toDelete.append(pending["msgID"])
                     continue
 

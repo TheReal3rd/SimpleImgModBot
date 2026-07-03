@@ -15,13 +15,9 @@ async def scanCommand(interaction: discord.Interaction, maxlimit: int = 0):
         await interaction.response.send_message(msg)
         return
 
-    scanLimit = None
-    if maxlimit != 0:
-        scanLimit = maxlimit
-
     numMemberChecked = 0
     badUserDict = {}
-    async for member in guild.fetch_members(limit=scanLimit):
+    async for member in guild.fetch_members(limit=maxlimit):
         numMemberChecked += 1
         badAccount = True
 
