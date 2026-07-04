@@ -31,8 +31,6 @@ class BanUserView(discord.ui.View):
     async def buttonCallback(self, interaction: discord.Interaction, button: discord.ui.Button):
         confView = ConfirmView(interaction.message.id, globals.PendingType.USER_BAN)
         await interaction.response.send_message(f"Confirm you wish to ban this user: {self.authorUsername}.", view = confView)
-        self.stop()
-
 
 class BanImageView(discord.ui.View):
 
@@ -40,8 +38,6 @@ class BanImageView(discord.ui.View):
     async def buttonCallback(self, interaction: discord.Interaction, button: discord.ui.Button):
         confView = ConfirmView(interaction.message.id, globals.PendingType.IMAGE_BAN)
         await interaction.response.send_message("Confirm you wish to ban this image.", view = confView)
-        self.stop()
-
 
 class ConfirmView(discord.ui.View):
 
