@@ -23,10 +23,10 @@ async def aboutCommand(interaction: discord.Interaction):
         value = f"{globals.perfManager.summary()}",
         inline = False
     )
-
+    hitTable = globals.hitTable
     embed.add_field(
-        name="Images Checked",
-        value = f"{hitTable["Img_Scans"]}",
+        name="Stats",
+        value = f"Images Scans:{hitTable["Img_Scans"]}\nBans:{hitTable["BanCount"]}",
         inline = False
     )
 

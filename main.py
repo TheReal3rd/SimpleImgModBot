@@ -62,22 +62,17 @@ scanQueues = {}
 resultQueues = {}
 purgeQueues = {}
 
-#statistics
-hitTable = {
-    "Img_Scans" : 0,
-    "Img_Bans" : 0,
-}
-
 #Resenfor Hate :angy: :fist:
 MAXIMUM_HITS = 30 # So im not constantly oblitarating him.
 hateTimer = datetime.now(UTC)
 resLHits = 0
 
-if globals.configDict["Jokes_Memes"]:
-    hitTable["L_Res"] = 0
-    hitTable["L_Halt"] = True
 
-hitTable = readJson("hits.json", hitTable)
+if globals.configDict["Jokes_Memes"]:
+    globals.DEFAULT_HITTABLE["L_Res"] = 0
+    globals.DEFAULT_HITTABLE["L_Halt"] = True
+
+globals.hitTable = readJson("hits.json", globals.DEFAULT_HITTABLE)
 
 #Perf
 globals.perfManager = PerformanceManager()
@@ -186,21 +181,21 @@ async def on_message(message):
         return
 
     if globals.configDict["Jokes_Memes"]:
-        if resLHits < MAXIMUM_HITS and hitTable["L_Halt"]:
+        if resLHits < MAXIMUM_HITS and globals.hitTable["L_Halt"]:
             if message.author.id == globals.RESENFOR_ID:
                 await message.add_reaction("\U0001F1F1") # Regional L emoji.
                 resLHits += 1
-                hitTable["L_Res"] += 1
+                globals.hitTable["L_Res"] += 1
                 if resLHits >= MAXIMUM_HITS:
                     hateTimer = datetime.now(UTC)
         
         if datetime.now(UTC) - hateTimer >= timedelta(days=1):
             resLHits = 0
-            #hitTable["L_Halt"] = True ## Hehehe. So boring.
+            #globals.hitTable["L_Halt"] = True ## Hehehe. So boring.
     
     authorUsername = message.author.name
     for attachment in message.attachments:
-        hitTable["Img_Scans"] += 1
+        globals.hitTable["Img_Scans"] += 1
         globals.perfManager.begin("IMG SCAN")
         if attachment.content_type and attachment.content_type.startswith("image/"):
             imageBytes = await attachment.read()
@@ -515,11 +510,11 @@ async def updateLoop():
                 for key in toDelete:
                     pendingDatabaseManager.deleteEntry(table, key)
 
-    writeJson("hits.json", hitTable)
+    writeJson("hits.json", globals.hitTable)
 
 try:
     client.run(globals.configDict["Token"])
 finally:
     databaseManager.close()
     pendingDatabaseManager.close()
-    writeJson("hits.json", hitTable)
+    writeJson("hits.json", globals.hitTable)

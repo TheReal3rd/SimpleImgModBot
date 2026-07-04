@@ -38,7 +38,13 @@ def pageString(text, maxLength):
 def readJson(path, default=None):
     try:
         with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            resultData = json.load(f)
+
+            for defaultkey in default.keys():
+                if not defaultkey in resultData.keys():
+                    resultData[defaultkey] = default[defaultkey]
+                    
+            return resultData
     except (FileNotFoundError, json.JSONDecodeError):
         return default if default is not None else {}
 

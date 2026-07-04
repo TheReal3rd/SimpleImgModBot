@@ -35,10 +35,15 @@ async def timeoutUser(user):
         logger.error("Missing required permissions to timeout user.")
     return False
 
-async def banUser(user, authorisedUser=""):
+async def banUser(user, authorisedUser="", applyCounter: bool = True):
     try:
         await user.ban(reason="ClankerMod - User ban after mod approval.")
         logger.info(f"User has been banned forever. User: {user.name} Auth by: {authorisedUser}")
+        if applyCounter:
+            if "BanCount" in globals.hitTable.keys():
+                globals.hitTable["BanCount"] += 1
+            else:
+                globals.hitTable["BanCount"] = 1
         return True
     except discord.Forbidden:
         logger.error("Missing required permissions to ban user.")

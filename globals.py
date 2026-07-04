@@ -15,6 +15,7 @@ IMG_EXTENSIONS = [".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff", ".tif", ".h
 
 CONFIG_PATH = "config.json"
 
+#TODO change all configs snake case to camel case not sure why i did that...
 DEFAULT_CONFIG = {
     "ServerID" : "",
     "ChannelID" : "",
@@ -37,6 +38,12 @@ ABT_MSG = [
     "3.1415926535",
 ]
 
+DEFAULT_HITTABLE = {
+    "Img_Scans" : 0,
+    "Img_Bans" : 0,
+    "BanCount" : 0,
+}
+
 #General
 client = None
 logger = None
@@ -44,6 +51,7 @@ databaseManager = None
 pendingDatabaseManager = None
 perfManager = None
 configDict = {}
+hitTable = {}
 
 #global Funcs
 

@@ -9,6 +9,8 @@ async def reactToggleCommand(interaction: discord.Interaction):
         logger.warning(f"Attempted admin command called by: {interaction.user.name} no actions where performed.")
         return
 
+    hitTable = globals.hitTable
+
     hitTable["L_Halt"] = not hitTable["L_Halt"]
     writeJson("hits.json", hitTable)
 
