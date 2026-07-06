@@ -11,7 +11,7 @@ async def helpCommand(interaction: discord.Interaction, page : int = 1):
     for cmd in client.tree.get_commands():
         commandList += FORMAT_TEMPLATE.format(name = cmd.name, description = cmd.description)
 
-    if globals.configDict["Jokes_Memes"]:
+    if globals.configDict["JokesMemes"]:
         commandList += FORMAT_TEMPLATE.format(name="tickleballs", description="Activates remote ball tickler that's attached to 3rd.")
 
     embed = None

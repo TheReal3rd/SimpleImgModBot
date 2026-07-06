@@ -16,6 +16,9 @@ class PerformanceManager: # TODO Add graphs and extand data to include time and 
     def start(self, operation: str):
         self.begin(operation)
 
+    def stop(self, operation: str):
+        self.end(operation)
+
     def end(self, operation: str):
         if operation not in self.metrics:
             return

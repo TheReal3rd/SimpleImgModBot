@@ -4,7 +4,7 @@ async def reactToggleCommand(interaction: discord.Interaction):
     if not await isInteractionAuthorised(interaction):
         return
 
-    if not globals.configDict["Jokes_Memes"]:
+    if not globals.configDict["JokesMemes"]:
         await interaction.response.send_message("Jokes and Meme have been disabled.", ephemeral=True)
         logger.warning(f"Attempted admin command called by: {interaction.user.name} no actions where performed.")
         return

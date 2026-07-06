@@ -28,7 +28,7 @@ async def scanCommand(interaction: discord.Interaction, maxlimit: int = 0):
             continue
 
         for role in member.roles:
-            if str(role.id) == globals.configDict["Required_Role_ID"]:
+            if str(role.id) == globals.configDict["RequiredRoleID"]:
                 badAccount = False
                 continue 
 

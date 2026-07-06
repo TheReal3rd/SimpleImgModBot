@@ -1,27 +1,31 @@
-import logging
 import discord
 
 from discord import app_commands
 from discord.ext import commands, tasks
 from datetime import datetime, timedelta, UTC
+from logging import getLogger
 
 import globals
 
-logger = logging.getLogger("ClankerMod")
+logger = getLogger("ClankerMod")
 
 # Auth Checks
 
 async def isInteractionAuthorised(interaction: discord.Interaction):
+    return await isInterationAdmin(interaction.user) and await isInteractionAuthServer(interaction)
+
+async def isInteractionAuthServer(interaction: discord.Interaction, responseMSG="This is not the guild i serve.", loggerMSG = "no actions where performed."):
     if not str(interaction.guild.id) == globals.SERVER_ID:
-        await interaction.response.send_message("This is not the guild i serve.", ephemeral=True)
-        logger.warning(f"Attempted admin command called by: {interaction.user.name} no actions where performed.")
+        await interaction.response.send_message(responseMSG, ephemeral=True)
+        logger.warning(f"Attempted admin command or action called by: {interaction.user.name} {loggerMSG}")
         return False
+    return True
 
-    if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("You're not an administrator.", ephemeral=True)
-        logger.warning(f"Attempted admin command called by: {interaction.user.name} no actions where performed.")
+async def isInterationAdmin(user, responseMSG="You're not an administrator.", loggerMSG="no actions where performed."):
+    if not user.guild_permissions.administrator:
+        await interaction.response.send_message(responseMSG, ephemeral=True)
+        logger.warning(f"Attempted admin command or action called by: {interaction.user.name} {loggerMSG}")
         return False
-
     return True
 
 #Actions

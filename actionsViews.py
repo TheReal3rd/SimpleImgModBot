@@ -54,55 +54,54 @@ class ConfirmView(discord.ui.View):
         match(self.pendingType): 
             case globals.PendingType.IMAGE_BAN: # IMAGE BANS
                 result = globals.pendingDatabaseManager.get("checks", reactMessageID)
-                if result != None:
+                if result == None:
+                    return
 
-                    if not user.guild_permissions.administrator:
-                        await interaction.response.send_message("You're not an Administrator.")
-                        logger.warning(f"{user.name} attempted to approve a image ban but aren't Administrator.")
-                        return
+                if not await isInterationAdmin(interaction.user, loggerMSG="attempted to approve a image ban but aren't Administrator."):
+                    return
 
-                    offendingMessage = await getMessage(globals.SERVER_ID, result["channelID"], result["messageID"])
-                    pendingSHA256 = result["sha256"]
+                offendingMessage = await getMessage(globals.SERVER_ID, result["channelID"], result["messageID"])
+                pendingSHA256 = result["sha256"]
 
-                    msg =  f"Added image to banned list.\nSHA256: {pendingSHA256}" # TODO later add extra info to allow mods to find the and undo any mistakes.
-                    if offendingMessage:
-                        await offendingMessage.delete()
+                responseMSG =  f"Added image to banned list.\nSHA256: {pendingSHA256}"
+                if offendingMessage:
+                    await offendingMessage.delete()
                         
-                        globals.databaseManager.add(pendingSHA256, np.array(result["embedding"], dtype=np.float32))
+                    globals.databaseManager.add(pendingSHA256, np.array(result["embedding"], dtype=np.float32))
                             
-                        logger.info(f"{user.name} has banned an image. sha256: {pendingSHA256}")
-                    else:
-                        msg = "Ran into an error whilst trying to delete the message."
-                        logger.error("Ran into enternal error trying to delete offending message...")
+                    logger.info(f"{user.name} has banned an image. sha256: {pendingSHA256}")
+                else:
+                    responseMSG = "Ran into an error whilst trying to delete the message."
+                    logger.error("Ran into enternal error trying to delete offending message...")
 
-                    deleteResult = globals.pendingDatabaseManager.deleteEntry("checks", reactMessageID)
-                    result = None
+                deleteResult = globals.pendingDatabaseManager.deleteEntry("checks", reactMessageID)
+                result = None
 
-                    if not deleteResult["before"] > deleteResult["after"]:
-                        msg = "The pending database has failed to delete the entry."
-                        logger.error("The database size comparison hasn't changed possible failure of deleting the pending task.")
+                if not deleteResult["before"] > deleteResult["after"]:
+                    responseMSG = "The pending database has failed to delete the entry."
+                    logger.error("The database size comparison hasn't changed possible failure of deleting the pending task.")
 
-                    await interaction.response.send_message(msg)
+                await interaction.response.send_message(responseMSG)
                     
-                    await interaction.message.delete()
+                await interaction.message.delete()
 
             case globals.PendingType.USER_BAN: # USER BANS
                 result = globals.pendingDatabaseManager.get("bans", reactMessageID)
-                if result != None:
-                    if not user.guild_permissions.administrator:
-                        await interaction.response.send_message( "You're not an administrator.")
-                        logger.warning(f"{user.name} attempted to approve a ban but aren't administrator.")
-                        return
+                if result == None:
+                    return
 
-                    userObj = await getMember(globals.SERVER_ID, result["userID"])
-                    banResult = await banUser(userObj, user.name)
+                if not await isInterationAdmin(interaction.user, loggerMSG="attempted to approve a ban but aren't administrator."):
+                    return
 
-                    await interaction.response.send_message( f"The user will be banned. User: {userObj.name} Success: {banResult}") 
-                    logger.info(f"{user.name} has banned the user {userObj.name}")
+                userObj = await getMember(globals.SERVER_ID, result["userID"])
+                banResult = await banUser(userObj, user.name)
 
-                    globals.pendingDatabaseManager.deleteEntry("bans", reactMessageID)
+                await interaction.response.send_message( f"The user will be banned. User: {userObj.name} Success: {banResult}") 
+                logger.info(f"{user.name} has banned the user {userObj.name}")
 
-                    await interaction.message.delete()
+                globals.pendingDatabaseManager.deleteEntry("bans", reactMessageID)
+
+                await interaction.message.delete()
             
             case globals.PendingType.ROLE_USER_BAN:
                 pass # TODO think about how this would be done.

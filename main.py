@@ -2,25 +2,22 @@ import discord
 import hashlib
 import imagehash
 import random
-import logging
-import torch
-import open_clip
-import faiss
-import numpy as np
-import aiohttp
-import io
 import os
 import asyncio
-import signal
 import time
 
 from pathlib import Path
-from PIL import Image
 from io import BytesIO
 from discord import app_commands
 from discord.ext import commands, tasks
 from datetime import datetime, timedelta, UTC
-from collections import deque
+
+from twitchAPI.twitch import Twitch
+from twitchAPI.oauth import UserAuthenticationStorageHelper
+from twitchAPI.eventsub.websocket import EventSubWebsocket
+from twitchAPI.helper import first
+from twitchAPI.object.eventsub import StreamOnlineEvent
+from twitchAPI.type import AuthScope
 
 import globals
 
@@ -30,6 +27,8 @@ from pendingDataManager import *
 from performanceManger import *
 from actionsViews import *
 from discordUtils import *
+from loggingUtils import *
+from clipEmbedUtils import initClip, getEmbedding
 
 if __name__ != "__main__":
     quit()
@@ -46,12 +45,6 @@ def calcEmbedding(imageBytes: bytes):
     return getEmbedding(imageBytes)
 globals.calcEmbeddingFunc = calcEmbedding
 
-def fetchLogs():
-    result = ""
-    for record in logBuffer:
-        result += (f"{record.getMessage()}\n")
-    return result
-
 #Config const's and load.
 
 globals.configDict = readJson(globals.CONFIG_PATH, globals.DEFAULT_CONFIG)
@@ -63,12 +56,10 @@ resultQueues = {}
 purgeQueues = {}
 
 #Resenfor Hate :angy: :fist:
-MAXIMUM_HITS = 30 # So im not constantly oblitarating him.
 hateTimer = datetime.now(UTC)
 resLHits = 0
 
-
-if globals.configDict["Jokes_Memes"]:
+if globals.configDict["JokesMemes"]:
     globals.DEFAULT_HITTABLE["L_Res"] = 0
     globals.DEFAULT_HITTABLE["L_Halt"] = True
 
@@ -78,60 +69,11 @@ globals.hitTable = readJson("hits.json", globals.DEFAULT_HITTABLE)
 globals.perfManager = PerformanceManager()
 
 #Logging
-logBuffer = deque(maxlen=500)
-
-class MemoryHandler(logging.Handler):
-    def emit(self, record):
-        logBuffer.append(record)
-
-logger = logging.getLogger("ClankerMod")#TODO look into which lib either FAISS CLIP or torch adding another logger and disable it.
+logger = initLogging()
 globals.logger = logger
-logger.setLevel(logging.INFO)
-
-formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-consoleHandler = logging.StreamHandler()
-consoleHandler.setFormatter(formatter)
-
-Path("logs").parent.mkdir(parents=True, exist_ok=True)
-timeDateNow = datetime.now(UTC).strftime("%Y-%m-%d")
-fileHandler = logging.FileHandler(f"logs/{timeDateNow}-clankerModLog.log", encoding="utf-8")
-fileHandler.setFormatter(formatter)
-
-memoryHandler = MemoryHandler()
-
-logger.addHandler(fileHandler)
-logger.addHandler(consoleHandler)
-logger.addHandler(memoryHandler)
-
-logCleanup("logs")
 
 #CLIP
-#CPU Mode or GPU but fall back to CPU if GPU not available.
-match(globals.configDict["CLIP_Processor"]):
-    case "cpu":
-        device = "cpu"
-    case _:
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-logger.info(f"CLIP + FAISS device: {device}")
-
-model, preprocess, _ = open_clip.create_model_and_transforms(
-    "ViT-B-32",
-    pretrained="openai"
-)
-model = model.to(device)
-model.eval()
-
-dim = 512
-index = faiss.IndexFlatIP(dim)
-imageStore = []
-
-@torch.no_grad()
-def getEmbedding(imageBytes):
-    image = Image.open(io.BytesIO(imageBytes)).convert("RGB")
-    image = preprocess(image).unsqueeze(0).to(device)
-    emb = model.encode_image(image)
-    emb = emb / emb.norm(dim=-1, keepdim=True)
-    return emb.cpu().numpy().astype("float32")[0]
+initClip()
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -154,6 +96,28 @@ globals.pendingDatabaseManager = pendingDatabaseManager
 globals.SERVER_ID = globals.configDict["ServerID"]
 globals.CHANNEL_ID = globals.configDict["ChannelID"]
 
+
+async def handle_channel_online(data: StreamOnlineEvent):
+    # You can add a check here to filter notifications if they come too quickly
+    # handy in case of spotty internet connections
+    channel_name = data.event.broadcaster_user_name
+    stream_url = f'https://twitch.tv/{data.event.broadcaster_user_login}'
+
+    config = globals.configDict['Twitch']
+    notifChannel: str = config['NotifChannel']
+    notifRoleID: str = config['NotifRoleID']
+    emojiNameID: str = config["NotifEmojiNameID"] # Server emojis have :name:id
+
+    message = f'ATTTENTION <@&{notifRoleID}>, {channel_name} is live! Watch the stream here: {stream_url} <{emojiNameID}>'
+
+    await sendMessage(globals.SERVER_ID, notifChannel, message)
+
+
+# Not sure if all of these are needed, but better safe then sorry.
+twitchApi: Twitch | None = None
+twitchAuth: UserAuthenticationStorageHelper | None = None
+twitchEventSub: EventSubWebsocket | None = None
+
 @client.event
 async def on_ready():
     await registerCommands()
@@ -161,6 +125,34 @@ async def on_ready():
     logger.info(f'Logged in as {client.user}')
     if not updateLoop.is_running():
         updateLoop.start()
+
+    # Setup the Twitch stuff
+    global twitchApi
+    global twitchAuth
+    global twitchEventSub
+    if 'Twitch' not in globals.configDict:
+        logger.warning("No Twitch configuration found. Continuing without Twitch integration")
+        return
+    config = globals.configDict['Twitch']
+
+    appId = config['AppId']
+    appSecret = config['AppSecret']
+    channel = config['TwitchChannel']
+    oauthCache = Path(config['TokenCache'])
+
+    twitchApi = await Twitch(appId, appSecret)
+    twitchAuth = UserAuthenticationStorageHelper(twitchApi, [AuthScope.USER_READ_EMAIL], storage_path=oauthCache)
+    await twitchAuth.bind()  # This should fetch the tokens from disk and verify them.
+
+    # Make sure the event sub callbacks are executed in this loop
+    twitchEventSub = EventSubWebsocket(twitchApi, callback_loop=asyncio.get_running_loop())
+    twitchEventSub.start()
+
+    user = await first(twitchApi.get_users(logins=[channel]))
+    if user is None:
+        raise RuntimeError("Could not locate Twitch Channel!")
+
+    await twitchEventSub.listen_stream_online(user.id, handle_channel_online)
 
 async def registerCommands():
     commandFiles = getFiles("commands", "py")
@@ -180,13 +172,13 @@ async def on_message(message):
     if message.author == client.user:
         return
 
-    if globals.configDict["Jokes_Memes"]:
-        if resLHits < MAXIMUM_HITS and globals.hitTable["L_Halt"]:
+    if globals.configDict["JokesMemes"]:
+        if resLHits < globals.MAXIMUM_L and globals.hitTable["L_Halt"]:
             if message.author.id == globals.RESENFOR_ID:
-                await message.add_reaction("\U0001F1F1") # Regional L emoji.
+                await message.add_reaction(globals.REGIONAL_L)
                 resLHits += 1
                 globals.hitTable["L_Res"] += 1
-                if resLHits >= MAXIMUM_HITS:
+                if resLHits >= globals.MAXIMUM_L:
                     hateTimer = datetime.now(UTC)
         
         if datetime.now(UTC) - hateTimer >= timedelta(days=1):
@@ -196,7 +188,7 @@ async def on_message(message):
     authorUsername = message.author.name
     for attachment in message.attachments:
         globals.hitTable["Img_Scans"] += 1
-        globals.perfManager.begin("IMG SCAN")
+        globals.perfManager.begin("Image Scan")
         if attachment.content_type and attachment.content_type.startswith("image/"):
             imageBytes = await attachment.read()
             
@@ -237,7 +229,7 @@ async def on_message(message):
                     "userID" : message.author.id,
                 })
                 foundMatch = True
-                globals.perfManager.end("IMG SCAN")
+                globals.perfManager.end("Image Scan")
                 break
             else:
                 logger.info(f"Embedding search into database...")
@@ -280,7 +272,7 @@ async def on_message(message):
                             "userID" : message.author.id,
                         })
                         foundMatch = True
-                        globals.perfManager.end("IMG SCAN")
+                        globals.perfManager.end("Image Scan")
                         break
 
                 if foundMatch:
@@ -317,8 +309,9 @@ async def on_message(message):
                     "channelID" : message.channel.id,
                     "userID" : message.author.id,
                 })
-                globals.perfManager.end("IMG SCAN")
+                globals.perfManager.end("Image Scan")
 
+# I don't see any way to improve... other then move it to a func but i feel thats moving the mess to new place.
 @client.event
 async def on_raw_reaction_add(payload):
     user = await getMember(globals.SERVER_ID, payload.user_id)
@@ -327,62 +320,59 @@ async def on_raw_reaction_add(payload):
     if user.bot:
         return
 
-    if payload.emoji.name == "👍":
+    if payload.emoji.name != globals.THUMB_UP:
+        return
 
-        result = pendingDatabaseManager.get(Tables.CHECKS, reactMessageID)
-        if result != None:
+    if not await isInterationAdmin(user, loggerMSG="attempted to approve a ban but aren't administrator."):
+        return
 
-            if not user.guild_permissions.administrator:
-                await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID,"You're not an administrator.")
-                logger.warning(f"{user.name} attempted to approve a image ban but aren't administrator.")
-                return
+    result = pendingDatabaseManager.get(Tables.CHECKS, reactMessageID)
+    if result != None: # React image ban.
 
-            offendingMessage = await getMessage(globals.SERVER_ID, result["channelID"], result["messageID"])
+        offendingMessage = await getMessage(globals.SERVER_ID, result["channelID"], result["messageID"])
 
-            pendingSHA256 = result["sha256"]
+        pendingSHA256 = result["sha256"]
 
-            msg =  f"Added image to banned list.\nSHA256: {pendingSHA256}"
-            if offendingMessage:
-                await offendingMessage.delete()
+        responseMSG =  f"Added image to banned list.\nSHA256: {pendingSHA256}"
+        if offendingMessage:
+            await offendingMessage.delete()
                 
-                databaseManager.add(pendingSHA256, np.array(result["embedding"], dtype=np.float32))
+            databaseManager.add(pendingSHA256, np.array(result["embedding"], dtype=np.float32))
                     
-                logger.info(f"{user.name} has banned an image. sha256: {pendingSHA256}")
-            else:
-                msg = "Ran into an error whilst trying to delete the message."
-                logger.error("Ran into enternal error trying to delete offending message...")
+            logger.info(f"{user.name} has banned an image. sha256: {pendingSHA256}")
+        else:
+            responseMSG = "Ran into an error whilst trying to delete the message."
+            logger.error("Ran into enternal error trying to delete offending message...")
 
-            deleteResult = pendingDatabaseManager.deleteEntry(Tables.CHECKS, reactMessageID)
-            result = None
+        deleteResult = pendingDatabaseManager.deleteEntry(Tables.CHECKS, reactMessageID)
 
-            if not deleteResult["before"] > deleteResult["after"]:
-                msg = "The pending database has failed to delete the entry."
-                logger.error("The database size comparison hasn't changed possible failure of deleting the pending task.")
+        if not deleteResult["before"] > deleteResult["after"]:
+            responseMSG = "The pending database has failed to delete the entry."
+            logger.error("The database size comparison hasn't changed possible failure of deleting the pending task.")
 
-            await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, msg)
+        await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, responseMSG)
 
-            messageObj = await getMessage(globals.SERVER_ID, globals.CHANNEL_ID, reactMessageID)
-            if messageObj:
-                await messageObj.delete()
-
+        messageObj = await getMessage(globals.SERVER_ID, globals.CHANNEL_ID, reactMessageID)
+        if messageObj:
+            await messageObj.delete()
+    
+    else:
+        # User ban react.
         result = pendingDatabaseManager.get(Tables.BANS, reactMessageID)
-        if result != None:
-            if not user.guild_permissions.administrator:
-                await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, "You're not an administrator.")
-                logger.warning(f"{user.name} attempted to approve a ban but aren't administrator.")
-                return
+        if result == None:
+            return
 
-            userObj = await getMember(globals.SERVER_ID, result["userID"])
-            banResult = await banUser(userObj, user.name)
+        userObj = await getMember(globals.SERVER_ID, result["userID"])
+        banResult = await banUser(userObj, user.name)
 
-            await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, f"The user will be banned. User: {userObj.name} Success: {banResult}") 
-            logger.info(f"{user.name} has banned the user {userObj.name}")
+        await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, f"The user will be banned. User: {userObj.name} Success: {banResult}") 
+        logger.info(f"{user.name} has banned the user {userObj.name}")
 
-            pendingDatabaseManager.deleteEntry(Tables.BANS, reactMessageID)
-            
-            messageObj = await getMessage(globals.SERVER_ID, globals.CHANNEL_ID, reactMessageID)
-            if messageObj:
-                await messageObj.delete()
+        pendingDatabaseManager.deleteEntry(Tables.BANS, reactMessageID)
+                
+        messageObj = await getMessage(globals.SERVER_ID, globals.CHANNEL_ID, reactMessageID)
+        if messageObj:
+            await messageObj.delete()
             
 @tasks.loop(seconds=5)
 async def scanLoop():
@@ -451,7 +441,7 @@ async def scanLoop():
     if finished:
         logger.info("Scanner loop stopping...")
         scanLoop.stop()
-    globals.perfManager.stop("Update Loop")
+    globals.perfManager.end("Update Loop")
 
 @tasks.loop(seconds=10)
 async def purgeLoop():
@@ -500,7 +490,7 @@ async def updateLoop():
                 if hasDaysPassed(datetime.fromisoformat(pending["time"]), days=20):
                     logger.info(f"Pending has expired: msgID: {pending["msgID"]}")
                     messageObj = await getMessage(globals.SERVER_ID, globals.CHANNEL_ID, pending["msgID"])
-                    if messageObj or messageObj != None:# Not exactly sure what the return would be if the message was already deleted... In the event of missing obj.
+                    if messageObj:
                         messageObj.delete()
 
                     toDelete.append(pending["msgID"])

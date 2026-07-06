@@ -5,6 +5,10 @@ SERVER_ID = -1
 CHANNEL_ID = -1
 
 RESENFOR_ID = 332634195941654529
+REGIONAL_L = "\U0001F1F1"
+MAXIMUM_L = 30 # So im not constantly oblitarating him.
+
+THUMB_UP = "\U0001F44D"
 
 MSG_LEN_LIMIT = 2000
 EMBED_LEN_LIMIT = 4095
@@ -15,16 +19,23 @@ IMG_EXTENSIONS = [".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff", ".tif", ".h
 
 CONFIG_PATH = "config.json"
 
-#TODO change all configs snake case to camel case not sure why i did that...
 DEFAULT_CONFIG = {
     "ServerID" : "",
     "ChannelID" : "",
     "Token" : "",
-    "Embedding_Threshold" : 0.87,
+    "EmbeddingThreshold" : 0.87,
     "Debug" : True,
-    "CLIP_Processor" : "auto",
-    "Jokes_Memes" : False, # Adding this so if someone does use this they can disable my joke out of the bot. 
-    "Required_Role_ID" : "", #role id. Replace this with one for your server.
+    "ClipProcessor" : "auto",
+    "JokesMemes" : False, # Adding this so if someone does use this they can disable my joke out of the bot. 
+    "RequiredRoleID" : "", #role id. Replace this with one for your server.
+    "Twitch": {
+        "TwitchChannel": "",  # Twitch channel log-in name of the channel you want live notifications for
+        "TokenCache": "", # filepath to a json file containing the OAuth tokens
+        "AppId": "",  # Twitch App ID.
+        "AppSecret": "",  # Twitch App Secret
+        "NotifChannel": "",  # Discord channel ID you want the bot to send the notifications on
+        "NotifRole": ""  # Role you want the bot to ping. Do not include the '@'
+    }
 }
 
 ABT_MSG = [
