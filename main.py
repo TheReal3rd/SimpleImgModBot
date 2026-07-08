@@ -1,11 +1,9 @@
 import discord
-import hashlib
-import imagehash
 import random
-import os
 import asyncio
 import time
 
+from hashlib import sha256
 from pathlib import Path
 from io import BytesIO
 from discord import app_commands
@@ -17,7 +15,6 @@ from twitchAPI.oauth import UserAuthenticationStorageHelper
 from twitchAPI.eventsub.websocket import EventSubWebsocket
 from twitchAPI.helper import first
 from twitchAPI.object.eventsub import StreamOnlineEvent
-from twitchAPI.type import AuthScope
 
 import globals
 
@@ -38,7 +35,7 @@ def calcImageHash(imageBytes: bytes):
 globals.calcImageHashFunc = calcImageHash
 
 def calcSHA256(imageBytes: bytes):
-    return hashlib.sha256(imageBytes).hexdigest()
+    return sha256(imageBytes).hexdigest()
 globals.calcSHA256Func = calcSHA256
 
 def calcEmbedding(imageBytes: bytes):
@@ -141,7 +138,7 @@ async def on_ready():
     oauthCache = Path(config['TokenCache'])
 
     twitchApi = await Twitch(appId, appSecret)
-    twitchAuth = UserAuthenticationStorageHelper(twitchApi, [AuthScope.USER_READ_EMAIL], storage_path=oauthCache)
+    twitchAuth = UserAuthenticationStorageHelper(twitchApi, [], storage_path=oauthCache)
     await twitchAuth.bind()  # This should fetch the tokens from disk and verify them.
 
     # Make sure the event sub callbacks are executed in this loop
@@ -356,8 +353,7 @@ async def on_raw_reaction_add(payload):
         if messageObj:
             await messageObj.delete()
     
-    else:
-        # User ban react.
+    else: # User ban react.
         result = pendingDatabaseManager.get(Tables.BANS, reactMessageID)
         if result == None:
             return

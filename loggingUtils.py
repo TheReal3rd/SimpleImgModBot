@@ -1,5 +1,6 @@
 import logging
 
+from sys import stdout
 from collections import deque
 from datetime import datetime, UTC
 from pathlib import Path
@@ -14,12 +15,15 @@ class MemoryHandler(logging.Handler):
 
 def initLogging():
     global logBuffer
-
-    logger = logging.getLogger("ClankerMod")#TODO look into which lib either FAISS CLIP or torch adding another logger and disable it.
+    logger = logging.getLogger("ClankerMod")
     logger.setLevel(logging.INFO)
+    logger.propagate = False
 
-    formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-    consoleHandler = logging.StreamHandler()
+    formatter = logging.Formatter(
+        fmt = "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt = "%Y-%m-%d %H:%M:%S",
+    )
+    consoleHandler = logging.StreamHandler(stdout)
     consoleHandler.setFormatter(formatter)
 
     Path("logs").parent.mkdir(parents=True, exist_ok=True)
