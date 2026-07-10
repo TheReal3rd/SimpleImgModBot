@@ -21,25 +21,54 @@ async def isInteractionAuthServer(interaction: discord.Interaction, responseMSG=
         return False
     return True
 
-async def isInterationAdmin(user, responseMSG="You're not an administrator.", loggerMSG="no actions where performed."):
+async def isInterationAdmin(user, responseMSG="You're not an administrator.", loggerMSG="no actions where performed.", interaction: discord.Interaction = None):
     if not user.guild_permissions.administrator:
-        await interaction.response.send_message(responseMSG, ephemeral=True)
-        logger.warning(f"Attempted admin command or action called by: {interaction.user.name} {loggerMSG}")
+        if interaction != None:
+            await interaction.response.send_message(responseMSG, ephemeral=True)
+        logger.warning(f"Attempted admin command or action called by: {user.name} {loggerMSG}")
         return False
     return True
 
+async def failureMessage(loggerMSG, responseMSG, interaction=None):
+    if interaction != None:
+        await interaction.response.send_message(responseMSG) 
+    else:
+        await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, responseMSG)
+    logger.info(f"{loggerMSG}, {responseMSG}")
+
 #Actions
 
-async def timeoutUser(user):
+async def timeoutUser(user, days=28):
+    if globals.configDict["Debug"]:
+        logger.info(f"IN TEST MODE!!! User would have been timedout. User: {user.name}")
+        return True
+
     try:
-        await user.timeout(timedelta(days=28), reason = "ClankerMod - Spam / Scam images or banned images posting.")
+        await user.timeout(timedelta(days=days), reason = "ClankerMod - Spam / Scam images or banned images posting.")
         logger.info(f"User has been timedout for 28 days. User: {user.name}")
         return True
     except discord.Forbidden:
         logger.error("Missing required permissions to timeout user.")
     return False
 
+async def kickUser(user, authorisedUser=""):
+    if globals.configDict["Debug"]:
+        logger.info(f"IN TEST MODE!!! User would have been kicked. User: {user.name} Auth by: {authorisedUser}")
+        return True
+
+    try:
+        await user.kick(reason="ClankerMod - User kick after mod approval.")
+        logger.info(f"User has been kicked. User: {user.name} Auth by: {authorisedUser}")
+        return True
+    except discord.Forbidden:
+        logger.error("Missing required permissions to kick user.")
+    return False
+
 async def banUser(user, authorisedUser="", applyCounter: bool = True):
+    if globals.configDict["Debug"]:
+        logger.info(f"IN TEST MODE!!! User would have been banned. User: {user.name} Auth by: {authorisedUser}")
+        return True
+
     try:
         await user.ban(reason="ClankerMod - User ban after mod approval.")
         logger.info(f"User has been banned forever. User: {user.name} Auth by: {authorisedUser}")

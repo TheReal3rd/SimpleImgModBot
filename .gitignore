@@ -6,7 +6,7 @@ logs/*
 pending.db
 hits.json
 notes.txt
-twitchstuff.diff
+*.diff
 fetched_tokens.json
 
 # Byte-compiled / optimized / DLL files

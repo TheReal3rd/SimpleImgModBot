@@ -28,16 +28,19 @@ async def aboutCommand(interaction: discord.Interaction):
         inline = False
     )
 
-    if globals.configDict["JokesMemes"]:
-        embed.add_field(
-            name="L's given to Resenfor",
-            value = f"Today: {resLHits}\nTotal: {hitTable["L_Res"]}",
-            inline = False
-        )
-
-        embed.set_footer(text=globals.ABT_MSG[random.randint(0, len(globals.ABT_MSG) - 1)])
+    if globals.configDict["Debug"]:
+        embed.set_footer(text="In tested mode!!! Certain function will do nothing!")
     else:
-        embed.set_footer(text="Made by 3rd")
+        if globals.configDict["JokesMemes"]:
+            embed.add_field(
+                name="L's given to Resenfor",
+                value = f"Today: {resLHits}\nTotal: {hitTable["L_Res"]}",
+                inline = False
+            )
+
+            embed.set_footer(text=choice(globals.ABT_MSG))
+        else:
+            embed.set_footer(text="Made by 3rd")
 
     await interaction.response.send_message(embed=embed)
     logger.info(f"{interaction.user.name} Has executed the about command.")

@@ -1,8 +1,8 @@
 import discord
-import random
 import asyncio
 import time
 
+from random import randint, choice
 from hashlib import sha256
 from pathlib import Path
 from io import BytesIO
@@ -18,14 +18,16 @@ from twitchAPI.object.eventsub import StreamOnlineEvent
 
 import globals
 
-from utils import *
-from fingerprintDataManager import *
-from pendingDataManager import *
-from performanceManger import *
+from managers.fingerprintDataManager import *
+from managers.pendingDataManager import *
+from managers.performanceManger import *
+
+from utils.utils import *
+from utils.discordUtils import *
+from utils.loggingUtils import *
+from utils.clipEmbedUtils import initClip, getEmbedding
+
 from actionsViews import *
-from discordUtils import *
-from loggingUtils import *
-from clipEmbedUtils import initClip, getEmbedding
 
 if __name__ != "__main__":
     quit()
@@ -123,6 +125,11 @@ async def on_ready():
     if not updateLoop.is_running():
         updateLoop.start()
 
+    if globals.configDict["Debug"]:
+        msg = "Warning the bot is in a testing state. Kick, Ban and more will do nothing."
+        await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, msg)
+        logger.warning(msg)
+
     # Setup the Twitch stuff
     global twitchApi
     global twitchAuth
@@ -178,11 +185,13 @@ async def on_message(message):
                 if resLHits >= globals.MAXIMUM_L:
                     hateTimer = datetime.now(UTC)
         
-        if datetime.now(UTC) - hateTimer >= timedelta(days=1):
+        if hasDaysPassed(hateTimer):
             resLHits = 0
             #globals.hitTable["L_Halt"] = True ## Hehehe. So boring.
     
     authorUsername = message.author.name
+    channelName = message.channel.name
+
     for attachment in message.attachments:
         globals.hitTable["Img_Scans"] += 1
         globals.perfManager.begin("Image Scan")
@@ -201,7 +210,7 @@ async def on_message(message):
 
                 embed = discord.Embed (
                     title = "Banned Image",
-                    description = f"Image matching in banned list was posted in {message.channel.name} by {authorUsername}.",
+                    description = f"Image matching in banned list was posted in {channelName} by {authorUsername}.",
                     color=discord.Color.red()
                 )
                 embed.add_field(
@@ -244,7 +253,7 @@ async def on_message(message):
 
                         embed = discord.Embed (
                             title = "Banned Image",
-                            description = f"Image matching in banned list was posted in {message.channel.name} by {authorUsername}.",
+                            description = f"Image matching in banned list was posted in {channelName} by {authorUsername}.",
                             color=discord.Color.red()
                         )
                         embed.add_field(
@@ -276,11 +285,11 @@ async def on_message(message):
                     break
             
             if not foundMatch:
-                logger.info(f"Image has been posted in {message.channel.name} by {message.author.name} sha256: {imageSHA256}")
+                logger.info(f"Image has been posted in {channelName} by {authorUsername} sha256: {imageSHA256}")
 
                 embed = discord.Embed (
                     title = "Image posted",
-                    description = f"Image has been posted in {message.channel.name} by {message.author.name}.",
+                    description = f"Image has been posted in {channelName} by {authorUsername}.",
                     color=discord.Color.green()
                 )
                 embed.add_field(
@@ -320,11 +329,14 @@ async def on_raw_reaction_add(payload):
     if payload.emoji.name != globals.THUMB_UP:
         return
 
-    if not await isInterationAdmin(user, loggerMSG="attempted to approve a ban but aren't administrator."):
-        return
+    #Note best not move auth check in first check list as this get applied to all reactions of thumb_up. ***
 
     result = pendingDatabaseManager.get(Tables.CHECKS, reactMessageID)
     if result != None: # React image ban.
+
+        if not await isInterationAdmin(user, loggerMSG="attempted to approve a image ban but aren't Administrator."):
+            await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, f"{user.name} attempted to approve an image ban. Who aren't Administrator.")
+            return
 
         offendingMessage = await getMessage(globals.SERVER_ID, result["channelID"], result["messageID"])
 
@@ -356,6 +368,10 @@ async def on_raw_reaction_add(payload):
     else: # User ban react.
         result = pendingDatabaseManager.get(Tables.BANS, reactMessageID)
         if result == None:
+            return
+
+        if not await isInterationAdmin(user, loggerMSG="attempted to approve a user ban but aren't Administrator."):
+            await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, f"{user.name} attempted to approve an user ban. Who aren't Administrator.")
             return
 
         userObj = await getMember(globals.SERVER_ID, result["userID"])

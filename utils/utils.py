@@ -1,6 +1,5 @@
 import json
 import os
-import random
 import logging
 
 from pathlib import Path
@@ -71,24 +70,6 @@ def getFiles(folderPath, endWithFilter):
 
 def hasDaysPassed(startTime, days=1):
     return datetime.now(UTC) >= startTime + timedelta(days=days)
-
-def logCleanup(folderPath):
-    timeDateNow = datetime.now(UTC).strftime("%Y-%m-%d").split("-")
-    for filename in os.listdir(folderPath):
-        filePath = os.path.join(folderPath, filename)
-        if not os.path.isfile(filePath):
-            continue
-
-        if not filename.endswith(".log"):
-            continue
-
-        nameSplit = filename.split("-")
-        monthDiff = abs(int(nameSplit[1]) - int(timeDateNow[1]))
-        yearDiff = abs(int(nameSplit[0]) - int(timeDateNow[0]))#Kinda useless unless the bot sits idle for a whole year with no restarts. But ah should be fine.
-
-        if yearDiff >= 1 or monthDiff >= 1:
-            logger.info(f"Log cleanup {filename} has been deleted.")
-            os.remove(filePath)
 
 def loadImageFolder(folderPath):
     for filename in os.listdir(folderPath):

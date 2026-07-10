@@ -15,8 +15,15 @@ async def scanCommand(interaction: discord.Interaction, maxlimit: int = 0):
         await interaction.response.send_message(msg)
         return
 
-    numMemberChecked = 0
-    badUserDict = {}
+    requiredRoleID = globals.configDict["RequiredRoleID"]
+    if not requiredRoleID or requiredRoleID.strip() == "":
+        msg = "No required Role ID provided."
+        logger.info(f"Roles scan called by: {interaction.user.name} {msg}")
+        await interaction.response.send_message(msg)
+        return
+
+    numMemberChecked: int = 0
+    badUserDict: dict = {}
     async for member in guild.fetch_members(limit=maxlimit):
         numMemberChecked += 1
         badAccount = True
@@ -28,7 +35,7 @@ async def scanCommand(interaction: discord.Interaction, maxlimit: int = 0):
             continue
 
         for role in member.roles:
-            if str(role.id) == globals.configDict["RequiredRoleID"]:
+            if str(role.id) == requiredRoleID:
                 badAccount = False
                 continue 
 
@@ -45,6 +52,8 @@ async def scanCommand(interaction: discord.Interaction, maxlimit: int = 0):
         logger.info(f"Roles scan called by: {interaction.user.name} {msg}")
         responseMSG = await interaction.response.send_message(msg)
     else:
+        view = RequiredRoleUserView(badUserDict)
+
         for key in badUserDict.keys():
             userData = badUserDict[key]
             msg += f"ID: {key} Name: {userData["name"]} DName: {userData["displayName"]}\n"
@@ -55,7 +64,7 @@ async def scanCommand(interaction: discord.Interaction, maxlimit: int = 0):
                 fp=io.BytesIO(msg.encode("utf-8")),
                 filename = "results.txt",
             )
-            await interaction.response.send_message("The result list was longer then the embed limit.", file=file)
+            await interaction.response.send_message("The result list was longer then the embed limit.", file=file, view=view)
             return
 
         embed = discord.Embed (
@@ -63,5 +72,5 @@ async def scanCommand(interaction: discord.Interaction, maxlimit: int = 0):
             description = msg,
             color=discord.Color.red()
         )
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, view=view)
     return

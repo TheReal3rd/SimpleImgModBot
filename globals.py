@@ -24,7 +24,7 @@ DEFAULT_CONFIG = {
     "ChannelID" : "",
     "Token" : "",
     "EmbeddingThreshold" : 0.87,
-    "Debug" : True,
+    "Debug" : False, # Disables Kick, Ban and image deletions for db calls used to test whether the operations reach them.
     "ClipProcessor" : "auto",
     "JokesMemes" : False, # Adding this so if someone does use this they can disable my joke out of the bot. 
     "RequiredRoleID" : "", #role id. Replace this with one for your server.
@@ -35,7 +35,8 @@ DEFAULT_CONFIG = {
         "AppSecret": "",  # Twitch App Secret
         "NotifChannel": "",  # Discord channel ID you want the bot to send the notifications on
         "NotifRole": ""  # Role you want the bot to ping. Do not include the '@'
-    }
+    },
+    "MonthLogsCleanup" : 2, # The Duration for how long logs will be kept. In Months
 }
 
 ABT_MSG = [
@@ -74,3 +75,4 @@ class PendingType(StrEnum):
     IMAGE_BAN = "imageBan"
     USER_BAN = "userBan"
     ROLE_USER_BAN = "roleUserBan"
+
