@@ -1,7 +1,7 @@
 import discord
 import asyncio
-import time
 
+from time import sleep
 from random import randint, choice
 from hashlib import sha256
 from pathlib import Path
@@ -97,8 +97,11 @@ globals.CHANNEL_ID = globals.configDict["ChannelID"]
 
 
 async def handle_channel_online(data: StreamOnlineEvent):
-    # You can add a check here to filter notifications if they come too quickly
-    # handy in case of spotty internet connections
+    global twitchPostDelay
+    if not datetime.now(UTC) >= twitchPostDelay + timedelta(hours=1):
+        logger.info("Twitch API : Canceled notify as 1 hour hasn't passed. Anti spam.")
+        return
+
     channel_name = data.event.broadcaster_user_name
     stream_url = f'https://twitch.tv/{data.event.broadcaster_user_login}'
 
@@ -108,14 +111,24 @@ async def handle_channel_online(data: StreamOnlineEvent):
     emojiNameID: str = config["NotifEmojiNameID"] # Server emojis have :name:id
 
     message = f'ATTTENTION <@&{notifRoleID}>, {channel_name} is live! Watch the stream here: {stream_url} <{emojiNameID}>'
-
-    await sendMessage(globals.SERVER_ID, notifChannel, message)
+    logger.info(f"Twitch API : Detected {channel_name} is live...")
+    twitchPostDelay = datetime.now(UTC)
+    
+    try:
+        await sendMessage(globals.SERVER_ID, notifChannel, message)
+    except discord.Forbidden:
+        logger.error("Twitch API : Failed to send notification due to lacking permissions.")
+    except discord.NotFound:
+        logger.error("Twitch API : Failed to send message due to the channel not existing or bot mis configured.")
+    except discord.HTTPException as err:
+        logger.error(f"Twitch API : Unexpected error. {err}")
 
 
 # Not sure if all of these are needed, but better safe then sorry.
 twitchApi: Twitch | None = None
 twitchAuth: UserAuthenticationStorageHelper | None = None
 twitchEventSub: EventSubWebsocket | None = None
+twitchPostDelay = datetime.now(UTC)
 
 @client.event
 async def on_ready():
@@ -414,7 +427,7 @@ async def scanLoop():
                     if dbFetchSHA != None and dbFetchSHA["sha256"] == imageSHA256:
                         timeoutResult = await timeoutUser(message.author)
                         await message.delete()
-                        time.sleep(1)
+                        sleep(1)
 
                         if not key in resultQueues.keys():
                             resultQueues[key] = 1
@@ -434,7 +447,7 @@ async def scanLoop():
                             embeddingMatch =  embScoreResult >= globals.configDict["EmbeddingThreshold"]
                             if embeddingMatch:
                                 await message.delete()
-                                time.sleep(1)
+                                sleep(1)
                                 escapeLoop = True
 
                                 if not key in resultQueues.keys():
@@ -473,7 +486,7 @@ async def purgeLoop():
         for index in range(0, min(globals.SCAN_BATCH_SIZE, msgListSize)):
             message = purgeQueues[key].pop()
             await message.delete()
-            time.sleep(1)
+            sleep(1)
 
             if not key in resultQueues.keys():
                 resultQueues[key] = 1

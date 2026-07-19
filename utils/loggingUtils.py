@@ -17,7 +17,7 @@ class MemoryHandler(logging.Handler):
 def initLogging():
     global logBuffer
     logger = logging.getLogger("ClankerMod")
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
     logger.propagate = False
 
     formatter = logging.Formatter(
