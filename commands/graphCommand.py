@@ -8,8 +8,8 @@ async def graphCommand(interaction: discord.Interaction):
 
     if result == None:
         await interaction.response.send_message("Not enough performance data collected.")
-        logger.info(f"{interaction.user.name} has executed thr graph command.")
+        logger.info(f"{interaction.user.name} has executed the graph command.")
         return
 
-    await interaction.response.send_message(content="Bot Performance.", file=result)
+    await interaction.response.send_message(content="Bot Performance.", file = discord.File(result, filename="benchmark.png"))
     logger.info(f"{interaction.user.name} Has executed the graph command.")
