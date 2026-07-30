@@ -3,6 +3,7 @@ Basic discord image banning bot with main goal to prevent and block scam image p
 
 ## TODO
 * Add video hashing (Low priority just a feature not a needed component).
+* Add image saving for further processing and checking by administrators. (Include a schedualed removal to prevent possible certain type of content being held.)
 
 ## Dev Info
 This bot detects messages with images within their posts. Which are then Hashed into sha256 alongside fuzzy hashed. Which are then lookup into the fingerprint database.
@@ -23,6 +24,14 @@ The bot will post when an image has been posted in the selected admin channel. W
 
 > Note: Debug being **True** in config will disable Ban, Kick, Timeout and more from working.
 
+As of now the images for the db will be provided. They're scam sites do not follow them. Do not be fooled by them. I am not responsible for your own stupidity.
+
+## Twitch Info
+
+Their is a Tiwtch streamer notification system within the bot written by Tintrex.
+The system isn't required to have the bot function but is provided for the specific use case of this bot.
+
+To enable the functionality of the Twitch notify posting you must fill in the twitch section of the configuration i won't provide a full guide but there is plenty information around the internet to setup Twitch API. 
 
 ## Usage
 1. Start the bot and let the program fail to create the config.json template.

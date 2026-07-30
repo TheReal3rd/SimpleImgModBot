@@ -1,13 +1,13 @@
-import json
 import os
-import logging
 
 from pathlib import Path
 from datetime import datetime, timedelta, UTC
+from logging import getLogger
+from json import load, dump, JSONDecodeError
 
 import globals
 
-logger = logging.getLogger("ClankerMod")
+logger = getLogger("ClankerMod")
 
 #Strings
 def limitString(msg, maxLength, end="..."):
@@ -37,21 +37,21 @@ def pageString(text, maxLength):
 def readJson(path, default=None):
     try:
         with open(path, "r", encoding="utf-8") as f:
-            resultData = json.load(f)
+            resultData = load(f)
 
             for defaultkey in default.keys():
                 if not defaultkey in resultData.keys():
                     resultData[defaultkey] = default[defaultkey]
                     
             return resultData
-    except (FileNotFoundError, json.JSONDecodeError):
+    except (FileNotFoundError, JSONDecodeError):
         return default if default is not None else {}
 
 def writeJson(path, data):
     Path(path).parent.mkdir(parents=True, exist_ok=True)
 
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4, ensure_ascii=False)
+        dump(data, f, indent=4, ensure_ascii=False)
 
 def getFiles(folderPath, endWithFilter):
     result = []

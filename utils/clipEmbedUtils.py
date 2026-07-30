@@ -1,6 +1,4 @@
 import torch
-import open_clip
-import faiss
 import numpy as np
 
 import globals
@@ -8,6 +6,7 @@ import globals
 from PIL import Image
 from io import BytesIO
 from logging import getLogger
+from open_clip import create_model_and_transforms
 
 model = None
 preprocess = None
@@ -27,7 +26,7 @@ def initClip():
             device = "cuda" if torch.cuda.is_available() else "cpu"
     logger.info(f"CLIP + FAISS device: {device}")
 
-    model, preprocess, _ = open_clip.create_model_and_transforms(
+    model, preprocess, _ = create_model_and_transforms(
         "ViT-B-32",
         pretrained="openai"
     )

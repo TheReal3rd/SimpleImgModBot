@@ -113,7 +113,7 @@ async def handle_channel_online(data: StreamOnlineEvent):
     message = f'ATTTENTION <@&{notifRoleID}>, {channel_name} is live! Watch the stream here: {stream_url} <{emojiNameID}>'
     logger.info(f"Twitch API : Detected {channel_name} is live...")
     twitchPostDelay = datetime.now(UTC)
-    
+
     try:
         await sendMessage(globals.SERVER_ID, notifChannel, message)
     except discord.Forbidden:
@@ -123,6 +123,11 @@ async def handle_channel_online(data: StreamOnlineEvent):
     except discord.HTTPException as err:
         logger.error(f"Twitch API : Unexpected error. {err}")
 
+def isTwitchConfigValid():
+    for key, data in globals.configDict["Twitch"].items():
+        if data.trim() == "":
+            return False
+    return True
 
 # Not sure if all of these are needed, but better safe then sorry.
 twitchApi: Twitch | None = None
@@ -147,7 +152,7 @@ async def on_ready():
     global twitchApi
     global twitchAuth
     global twitchEventSub
-    if 'Twitch' not in globals.configDict:
+    if 'Twitch' not in globals.configDict: # Will no longer work due to rework on how config loads. I'll remove in the future.
         logger.warning("No Twitch configuration found. Continuing without Twitch integration")
         return
     config = globals.configDict['Twitch']
@@ -156,6 +161,10 @@ async def on_ready():
     appSecret = config['AppSecret']
     channel = config['TwitchChannel']
     oauthCache = Path(config['TokenCache'])
+
+    if appID == "" or appScret == "" or channel == "" or oauthCache == "":
+        logger.warning("No Twitch configuration found. Continuing without Twitch integration")
+        return
 
     twitchApi = await Twitch(appId, appSecret)
     twitchAuth = UserAuthenticationStorageHelper(twitchApi, [], storage_path=oauthCache)
@@ -317,7 +326,7 @@ async def on_message(message):
                 embed.set_footer(text="React with 👍 to blacklist")
 
                 confirmButtonView = BanImageView()
-                msgID = await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, embed= embed, view=confirmButtonView)
+                msgID = await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, embed = embed, view = confirmButtonView)
 
                 pendingDatabaseManager.submitPending(Tables.CHECKS, {
                     "msgID" : msgID,
