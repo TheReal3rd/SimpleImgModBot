@@ -162,7 +162,7 @@ async def on_ready():
     channel = config['TwitchChannel']
     oauthCache = Path(config['TokenCache'])
 
-    if appID == "" or appScret == "" or channel == "" or oauthCache == "":
+    if appId == "" or appSecret == "" or channel == "" or oauthCache == "":
         logger.warning("No Twitch configuration found. Continuing without Twitch integration")
         return
 
