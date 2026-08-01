@@ -9,6 +9,7 @@ from io import BytesIO
 from discord import app_commands
 from discord.ext import commands, tasks
 from datetime import datetime, timedelta, UTC
+from PIL import Image
 
 from twitchAPI.twitch import Twitch
 from twitchAPI.oauth import UserAuthenticationStorageHelper
@@ -144,8 +145,16 @@ async def on_ready():
         updateLoop.start()
 
     if globals.configDict["Debug"]:
+        #To prevent spam of the warning msg in channels.
+        cancelMsg = False
         msg = "Warning the bot is in a testing state. Kick, Ban and more will do nothing."
-        await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, msg)
+        history = await getBotMessageHistory(globals.CHANNEL_ID, 20)
+        for historyMsg in history: 
+            if historyMsg.content == msg:
+                cancelMsg = True
+
+        if not cancelMsg:
+            await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, msg)
         logger.warning(msg)
 
     # Setup the Twitch stuff

@@ -111,7 +111,7 @@ class PerformanceManager:
                 label=ops,
             )
 
-        plt.title("Execution Perfromance")
+        plt.title("Execution Performance")
         plt.xlabel("Operations Runs")
         plt.ylabel("Execution Time (seconds)")
         plt.legend()
@@ -126,8 +126,6 @@ class PerformanceManager:
         buffer.seek(0)
 
         return buffer
-
-
 
 if __name__ == "__main__":
     import math

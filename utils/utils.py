@@ -39,9 +39,10 @@ def readJson(path, default=None):
         with open(path, "r", encoding="utf-8") as f:
             resultData = load(f)
 
-            for defaultkey in default.keys():
-                if not defaultkey in resultData.keys():
-                    resultData[defaultkey] = default[defaultkey]
+            if not default is None:
+                for defaultkey in default.keys():
+                    if not defaultkey in resultData.keys():
+                        resultData[defaultkey] = default[defaultkey]
                     
             return resultData
     except (FileNotFoundError, JSONDecodeError):

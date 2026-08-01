@@ -128,6 +128,17 @@ async def getHistoryWithAttachments(channel, range):
 
 
 async def getBotMessageHistory(channel, range):
+    if type(channel) == str:
+        guild = globals.client.get_guild(globals.SERVER_ID)
+        if guild is None:
+            guild = await globals.client.fetch_guild(globals.SERVER_ID)
+
+        channelID = channel
+
+        channel = guild.get_channel(channelID)
+        if channel is None:
+            channel = await globals.client.fetch_channel(channelID)
+
     messages = []
     async for message in channel.history(limit=range):
         if message.author.id == globals.client.user.id:

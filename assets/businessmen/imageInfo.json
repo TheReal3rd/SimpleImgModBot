@@ -1,0 +1,47 @@
+{
+    "businessMan1" : {
+        "path" : "businessMan1.webp",
+        "offsetX" : -50,
+        "offsetY" : 151
+    },
+    "businessMan2" : {
+        "path" : "businessMan2.webp",
+        "offsetX" : -28,
+        "offsetY" : 151
+    },
+    "businessMan3" : {
+        "path" : "businessMan3.webp",
+        "offsetX" : 485,
+        "offsetY" : 151
+    },
+    "businessMan4" : {
+        "path" : "businessMan4.webp",
+        "offsetX" : -20,
+        "offsetY" : 154
+    },
+    "businessMan5" : {
+        "path" : "businessMan5.webp",
+        "offsetX" : 421,
+        "offsetY" : 159
+    },
+    "businessMan6" : {
+        "path" : "businessMan6.webp",
+        "offsetX" : 421,
+        "offsetY" : 159
+    },
+    "businessMan7" : {
+        "path" : "businessMan7.webp",
+        "offsetX" : -81,
+        "offsetY" : 156
+    },
+    "businessMan8" : {
+        "path" : "businessMan8.webp",
+        "offsetX" : 478,
+        "offsetY" : 155
+    },
+    "businessMan9" : {
+        "path" : "businessMan9.webp",
+        "offsetX" : 208,
+        "offsetY" : 152
+    }
+}
