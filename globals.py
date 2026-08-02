@@ -1,4 +1,15 @@
-from enum import StrEnum
+from enum import IntEnum, StrEnum
+
+class PendingType(StrEnum):
+    IMAGE_BAN = "imageBan"
+    USER_BAN = "userBan"
+    ROLE_USER_BAN = "roleUserBan"
+
+class ImageSaveModes(IntEnum):
+    BASIC = 0
+    SHA = 1
+    EMBBED = 2
+    ALL = 3
 
 #Const
 SERVER_ID = -1
@@ -18,6 +29,7 @@ IMG_EXTENSIONS = [".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff", ".tif", ".h
 # Few formats aren't included due to not working with current set up nor scope.
 
 CONFIG_PATH = "config.json"
+IMAGE_PATH = "working_images/"
 
 DEFAULT_CONFIG = {
     "ServerID" : "",
@@ -26,7 +38,7 @@ DEFAULT_CONFIG = {
     "EmbeddingThreshold" : 0.87,
     "Debug" : False, # Disables Kick, Ban and image deletions for db calls used to test whether the operations reach them.
     "ClipProcessor" : "auto",
-    "JokesMemes" : False, # Adding this so if someone does use this they can disable my joke out of the bot. 
+    "JokesMemes" : True, # Adding this so if someone does use this they can disable my joke out of the bot. 
     "RequiredRoleID" : "", #role id. Replace this with one for your server.
     "Twitch": {
         "TwitchChannel": "",  # Twitch channel log-in name of the channel you want live notifications for
@@ -36,7 +48,17 @@ DEFAULT_CONFIG = {
         "NotifChannel": "",  # Discord channel ID you want the bot to send the notifications on
         "NotifRole": ""  # Role you want the bot to ping. Do not include the '@'
     },
+    "PendingKeepDays" : 20, # The number of days maximum to keep pending bans and checks. 
     "MonthLogsCleanup" : 2, # The Duration for how long logs will be kept. In Months
+    "SaveImages" : False, # Allows the bot to save the images. To allow the administrator to review images to add to the block list.
+    "SaveImageConfig" : {
+        "KeepDays" : 20,
+        # 0 - BASIC - Save images that aren't banned.
+        # 1 - SHA - Save images that got hit by SHA256 check.
+        # 2 - EMBBED- Save images that got hit by embbed check.
+        # 3 - ALL - Save Everything.
+        "SaveLevel": ImageSaveModes.ALL
+    }
 }
 
 ABT_MSG = [
@@ -50,6 +72,7 @@ ABT_MSG = [
     "3.1415926535",
 ]
 
+HITS_PATH = "hits.json" # Was only for Resenfor react but used to store other useful data.
 DEFAULT_HITTABLE = {
     "Img_Scans" : 0,
     "Img_Bans" : 0,
@@ -62,6 +85,7 @@ logger = None
 databaseManager = None
 pendingDatabaseManager = None
 perfManager = None
+imageManager = None
 configDict = {}
 hitTable = {}
 
@@ -70,9 +94,3 @@ hitTable = {}
 calcImageHashFunc = None
 calcSHA256Func = None
 calcEmbeddingFunc = None
-
-class PendingType(StrEnum):
-    IMAGE_BAN = "imageBan"
-    USER_BAN = "userBan"
-    ROLE_USER_BAN = "roleUserBan"
-

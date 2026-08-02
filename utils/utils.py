@@ -103,3 +103,14 @@ def loadImageFolder(folderPath):
                 logger.warning(f"Failed to add {filename} to the database...")
         except Exception as e:
             logger.error(f"Failed to process image: {filename} | {e}")
+
+def dirCheck(path, create=True):
+    directory = Path(path)
+
+    if directory.exists() and directory.is_dir():
+        return True
+    else:
+        if create:
+            directory.mkdir(parents=True, exist_ok=True)
+            return True
+        return False

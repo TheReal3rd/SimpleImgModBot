@@ -14,7 +14,7 @@ class MemoryHandler(logging.Handler):
     def emit(self, record):
         logBuffer.append(record)
 
-def initLogging():
+def initLogging(): 
     global logBuffer
     logger = logging.getLogger("ClankerMod")
     logger.setLevel(logging.DEBUG)

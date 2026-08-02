@@ -1,7 +1,12 @@
 import sqlite3
 import numpy as np
 
+from datetime import datetime
 from enum import StrEnum
+
+from utils.utils import hasDaysPassed
+
+import globals
 
 class Tables(StrEnum):
     CHECKS = "checks"
@@ -281,6 +286,25 @@ class PendingDataManager():
         for table in Tables:
             total += self.count(table)
         return total
+
+    async def cleanup(self):
+        for table in Tables:
+            resultList = self.fetchAll(table)
+            if resultList != None and len(resultList) != 0:
+                toDelete = []
+                for pending in resultList:
+                    if hasDaysPassed(datetime.fromisoformat(pending["time"]), days=globals.configDict["PendingKeepDays"]):
+                        logger.info(f"Pending has expired: msgID: {pending["msgID"]}")
+                        messageObj = await getMessage(globals.SERVER_ID, globals.CHANNEL_ID, pending["msgID"])
+                        if messageObj:
+                            messageObj.delete()
+
+                        toDelete.append(pending["msgID"])
+                        continue
+
+                if len(toDelete) != 0:
+                    for key in toDelete:
+                        self.deleteEntry(table, key)
 
 
 if __name__ == "__main__":

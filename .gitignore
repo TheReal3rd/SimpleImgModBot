@@ -7,6 +7,7 @@ hits.json
 notes.txt
 *.diff
 fetched_tokens.json
+working_images/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

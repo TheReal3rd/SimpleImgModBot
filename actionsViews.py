@@ -116,6 +116,9 @@ class ConfirmView(discord.ui.View):
                     
                 await interaction.message.delete()
 
+                if configDict["SaveImages"]:
+                    imageManager.removeImage(pendingSHA256)
+
             case globals.PendingType.USER_BAN: # USER BANS
                 if not await isInterationAdmin(interaction.user, loggerMSG="attempted to approve a ban but aren't administrator."):
                     return

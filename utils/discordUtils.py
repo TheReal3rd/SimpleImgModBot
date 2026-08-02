@@ -126,7 +126,6 @@ async def getHistoryWithAttachments(channel, range):
             messages.append(message)
     return messages
 
-
 async def getBotMessageHistory(channel, range):
     if type(channel) == str:
         guild = globals.client.get_guild(globals.SERVER_ID)
@@ -144,7 +143,3 @@ async def getBotMessageHistory(channel, range):
         if message.author.id == globals.client.user.id:
             messages.append(message)
     return messages
-
-
-       
-

@@ -22,6 +22,7 @@ import globals
 from managers.fingerprintDataManager import *
 from managers.pendingDataManager import *
 from managers.performanceManger import *
+from managers.imageManager import *
 
 from utils.utils import *
 from utils.discordUtils import *
@@ -63,7 +64,7 @@ if globals.configDict["JokesMemes"]:
     globals.DEFAULT_HITTABLE["L_Res"] = 0
     globals.DEFAULT_HITTABLE["L_Halt"] = True
 
-globals.hitTable = readJson("hits.json", globals.DEFAULT_HITTABLE)
+globals.hitTable = readJson(globals.HITS_PATH, globals.DEFAULT_HITTABLE)
 
 #Perf
 globals.perfManager = PerformanceManager()
@@ -71,6 +72,7 @@ globals.perfManager = PerformanceManager()
 #Logging
 logger = initLogging()
 globals.logger = logger
+loggerTimer = datetime.now(UTC)
 
 #CLIP
 initClip()
@@ -92,10 +94,13 @@ loadImageFolder("images")
 pendingDatabaseManager = PendingDataManager()
 globals.pendingDatabaseManager = pendingDatabaseManager
 
+if globals.configDict["SaveImages"]:
+    imageManager = ImageManager(globals.IMAGE_PATH)
+    globals.imageManager = imageManager
+
 #General Const's
 globals.SERVER_ID = globals.configDict["ServerID"]
 globals.CHANNEL_ID = globals.configDict["ChannelID"]
-
 
 async def handle_channel_online(data: StreamOnlineEvent):
     global twitchPostDelay
@@ -265,6 +270,10 @@ async def on_message(message):
                     "time" : datetime.now(UTC).isoformat(),
                     "userID" : message.author.id,
                 })
+
+                if globals.configDict["SaveImages"] and imageManager.getSaveLevel() >= globals.ImageSaveModes.SHA:
+                    imageManager.saveImage(imageBytes)
+
                 foundMatch = True
                 globals.perfManager.end("Image Scan")
                 break
@@ -308,6 +317,10 @@ async def on_message(message):
                             "time" : datetime.now(UTC).isoformat(),
                             "userID" : message.author.id,
                         })
+
+                        if globals.configDict["SaveImages"] and imageManager.getSaveLevel() >= globals.ImageSaveModes.EMBBED:
+                            imageManager.saveImage(imageBytes)
+
                         foundMatch = True
                         globals.perfManager.end("Image Scan")
                         break
@@ -346,6 +359,9 @@ async def on_message(message):
                     "channelID" : message.channel.id,
                     "userID" : message.author.id,
                 })
+                if globals.configDict["SaveImages"]:
+                    imageManager.saveImage(imageBytes)
+
                 globals.perfManager.end("Image Scan")
 
 # I don't see any way to improve... other then move it to a func but i feel thats moving the mess to new place.
@@ -395,6 +411,9 @@ async def on_raw_reaction_add(payload):
         messageObj = await getMessage(globals.SERVER_ID, globals.CHANNEL_ID, reactMessageID)
         if messageObj:
             await messageObj.delete()
+
+            if configDict["SaveImages"]:
+                imageManager.removeImage(pendingSHA256)
     
     else: # User ban react.
         result = pendingDatabaseManager.get(Tables.BANS, reactMessageID)
@@ -418,7 +437,7 @@ async def on_raw_reaction_add(payload):
             await messageObj.delete()
             
 @tasks.loop(seconds=5)
-async def scanLoop():
+async def scanLoop(): # Manual scan command - commands.scanCommand
     globals.perfManager.begin("Scan Loop")
     finished = False
     toDelete = []
@@ -487,7 +506,7 @@ async def scanLoop():
     globals.perfManager.end("Update Loop")
 
 @tasks.loop(seconds=10)
-async def purgeLoop():
+async def purgeLoop(): # purge loop - commands.purgemsgCommand
     globals.perfManager.begin("Purge Loop")
     finished = False
     toDelete = []
@@ -524,30 +543,22 @@ async def purgeLoop():
 
 
 @tasks.loop(seconds=60)
-async def updateLoop():
-    for table in Tables:
-        resultList = pendingDatabaseManager.fetchAll(table)
-        if resultList != None and len(resultList) != 0:
-            toDelete = []
-            for pending in resultList:
-                if hasDaysPassed(datetime.fromisoformat(pending["time"]), days=20):
-                    logger.info(f"Pending has expired: msgID: {pending["msgID"]}")
-                    messageObj = await getMessage(globals.SERVER_ID, globals.CHANNEL_ID, pending["msgID"])
-                    if messageObj:
-                        messageObj.delete()
+async def updateLoop(): # Auto saving and auto cleanup cycles.
+    global loggerTimer, logger, pendingDatabaseManager
+    await pendingDatabaseManager.cleanup()
+    if globals.configDict["SaveImages"]:
+        imageManager.cleanup()
 
-                    toDelete.append(pending["msgID"])
-                    continue
+    writeJson(globals.HITS_PATH, globals.hitTable)
 
-            if len(toDelete) != 0:
-                for key in toDelete:
-                    pendingDatabaseManager.deleteEntry(table, key)
-
-    writeJson("hits.json", globals.hitTable)
+    if hasDaysPassed(loggerTimer):
+        loggerTimer = datetime.now(UTC)
+        logger = initLogging()
+        globals.logger = logger
 
 try:
     client.run(globals.configDict["Token"])
 finally:
     databaseManager.close()
     pendingDatabaseManager.close()
-    writeJson("hits.json", globals.hitTable)
+    writeJson(globals.HITS_PATH, globals.hitTable)

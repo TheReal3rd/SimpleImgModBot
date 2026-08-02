@@ -4,6 +4,7 @@ Basic discord image banning bot with main goal to prevent and block scam image p
 ## TODO
 * Add video hashing (Low priority just a feature not a needed component).
 * Add image saving for further processing and checking by administrators. (Include a schedualed removal to prevent possible certain type of content being held.)
+* Check the ActionView and React - Compare and decide to combine into a single func. Possibly too challenging.
 
 ## Dev Info
 This bot detects messages with images within their posts. Which are then Hashed into sha256 alongside fuzzy hashed. Which are then lookup into the fingerprint database.
