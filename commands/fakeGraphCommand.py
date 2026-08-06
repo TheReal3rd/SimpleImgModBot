@@ -5,7 +5,7 @@ if globals.configDict["JokesMemes"]:
     @app_commands.describe(successtype="The type of success (Falling, Raising & Flat).")
     @app_commands.describe(label="The plot label name.")
     @app_commands.describe(label="Include business man.")
-    async def fakeGraphCommand(interaction: discord.Interaction, graphname:str, successtype: str, label:str = "investments", man:bool = False):
+    async def fakeGraphCommand(interaction: discord.Interaction, graphname:str, successtype: str, label:str = "Investments", man:bool = False):
         if not await isInteractionAuthServer(interaction):
             return
 

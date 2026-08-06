@@ -364,9 +364,9 @@ async def on_message(message):
 
                 globals.perfManager.end("Image Scan")
 
-# I don't see any way to improve... other then move it to a func but i feel thats moving the mess to new place.
+#Combined the functionality into actionView.py This is now the main section.
 @client.event
-async def on_raw_reaction_add(payload):
+async def on_raw_reaction_add(payload): #TODO remove this and replace it with the actions.
     user = await getMember(globals.SERVER_ID, payload.user_id)
     reactMessageID = str(payload.message_id)
 
@@ -377,64 +377,17 @@ async def on_raw_reaction_add(payload):
         return
 
     #Note best not move auth check in first check list as this get applied to all reactions of thumb_up. ***
+    if pendingDatabaseManager.exists(Tables.CHECKS, reactMessageID): # React image ban.
 
-    result = pendingDatabaseManager.get(Tables.CHECKS, reactMessageID)
-    if result != None: # React image ban.
-
-        if not await isInterationAdmin(user, loggerMSG="attempted to approve a image ban but aren't Administrator."):
-            await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, f"{user.name} attempted to approve an image ban. Who aren't Administrator.")
-            return
-
-        offendingMessage = await getMessage(globals.SERVER_ID, result["channelID"], result["messageID"])
-
-        pendingSHA256 = result["sha256"]
-
-        responseMSG =  f"Added image to banned list.\nSHA256: {pendingSHA256}"
-        if offendingMessage:
-            await offendingMessage.delete()
-                
-            databaseManager.add(pendingSHA256, np.array(result["embedding"], dtype=np.float32))
-                    
-            logger.info(f"{user.name} has banned an image. sha256: {pendingSHA256}")
-        else:
-            responseMSG = "Ran into an error whilst trying to delete the message."
-            logger.error("Ran into enternal error trying to delete offending message...")
-
-        deleteResult = pendingDatabaseManager.deleteEntry(Tables.CHECKS, reactMessageID)
-
-        if not deleteResult["before"] > deleteResult["after"]:
-            responseMSG = "The pending database has failed to delete the entry."
-            logger.error("The database size comparison hasn't changed possible failure of deleting the pending task.")
-
-        await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, responseMSG)
-
-        messageObj = await getMessage(globals.SERVER_ID, globals.CHANNEL_ID, reactMessageID)
-        if messageObj:
-            await messageObj.delete()
-
-            if configDict["SaveImages"]:
-                imageManager.removeImage(pendingSHA256)
+        view = ConfirmView(reactMessageID, globals.PendingType.IMAGE_BAN)
+        await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, f"Confirm this image ban:", view=view) 
     
     else: # User ban react.
-        result = pendingDatabaseManager.get(Tables.BANS, reactMessageID)
-        if result == None:
-            return
+        if pendingDatabaseManager.exists(Tables.BANS, reactMessageID):
 
-        if not await isInterationAdmin(user, loggerMSG="attempted to approve a user ban but aren't Administrator."):
-            await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, f"{user.name} attempted to approve an user ban. Who aren't Administrator.")
-            return
+            view = ConfirmView(reactMessageID, globals.PendingType.USER_BAN)
+            await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, f"Confirm this user ban:", view=view) 
 
-        userObj = await getMember(globals.SERVER_ID, result["userID"])
-        banResult = await banUser(userObj, user.name)
-
-        await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, f"The user will be banned. User: {userObj.name} Success: {banResult}") 
-        logger.info(f"{user.name} has banned the user {userObj.name}")
-
-        pendingDatabaseManager.deleteEntry(Tables.BANS, reactMessageID)
-                
-        messageObj = await getMessage(globals.SERVER_ID, globals.CHANNEL_ID, reactMessageID)
-        if messageObj:
-            await messageObj.delete()
             
 @tasks.loop(seconds=5)
 async def scanLoop(): # Manual scan command - commands.scanCommand

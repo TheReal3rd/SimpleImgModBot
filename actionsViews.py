@@ -116,7 +116,7 @@ class ConfirmView(discord.ui.View):
                     
                 await interaction.message.delete()
 
-                if configDict["SaveImages"]:
+                if globals.configDict["SaveImages"]:
                     imageManager.removeImage(pendingSHA256)
 
             case globals.PendingType.USER_BAN: # USER BANS
