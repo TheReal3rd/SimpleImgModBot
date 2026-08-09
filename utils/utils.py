@@ -69,7 +69,7 @@ def getFiles(folderPath, endWithFilter):
 
     return result
 
-def hasDaysPassed(startTime, days=1):
+def hasDaysPassed(startTime, days=1) -> bool:
     return datetime.now(UTC) >= startTime + timedelta(days=days)
 
 def loadImageFolder(folderPath):
@@ -104,7 +104,7 @@ def loadImageFolder(folderPath):
         except Exception as e:
             logger.error(f"Failed to process image: {filename} | {e}")
 
-def dirCheck(path, create=True):
+def dirCheck(path, create=True) -> bool:
     directory = Path(path)
 
     if directory.exists() and directory.is_dir():

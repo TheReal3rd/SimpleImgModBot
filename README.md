@@ -29,7 +29,7 @@ As of now the images for the db will be provided. They're scam sites do not foll
 
 ## Twitch Info
 
-Their is a Tiwtch streamer notification system within the bot written by Tintrex.
+Their is a Twitch streamer notification system within the bot written by Tintrex.
 The system isn't required to have the bot function but is provided for the specific use case of this bot.
 
 To enable the functionality of the Twitch notify posting you must fill in the twitch section of the configuration i won't provide a full guide but there is plenty information around the internet to setup Twitch API. 

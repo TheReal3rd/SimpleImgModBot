@@ -5,6 +5,7 @@ from sys import stdout
 from collections import deque
 from datetime import datetime, UTC
 from pathlib import Path
+from logging.handlers import TimedRotatingFileHandler
 
 import globals
 
@@ -32,8 +33,15 @@ def initLogging():
 
     Path("logs").parent.mkdir(parents=True, exist_ok=True)
     timeDateNow = datetime.now(UTC).strftime("%Y-%m-%d")
-    fileHandler = logging.FileHandler(f"logs/{timeDateNow}-clankerModLog.log", encoding="utf-8")
+    fileHandler = TimedRotatingFileHandler(
+        f"logs/{timeDateNow}-clankerModLog.log",
+        when = "midnight",
+        interval = 1,
+        backupCount = globals.configDict["MonthLogsCleanup"]
+    )
     fileHandler.setFormatter(formatter)
+
+#logging.FileHandler(f"logs/{timeDateNow}-clankerModLog.log", encoding="utf-8")
 
     memoryHandler = MemoryHandler()
 
@@ -41,7 +49,7 @@ def initLogging():
     logger.addHandler(consoleHandler)
     logger.addHandler(memoryHandler)
 
-    logCleanup("logs")
+    #logCleanup("logs")
     return logger
 
 def fetchLogs():
@@ -51,6 +59,7 @@ def fetchLogs():
         result += (f"{record.getMessage()}\n")
     return result
 
+#TODO remove once testing of TimedRotatingFileHandler has passed.
 def logCleanup(folderPath):
     timeDateNow = datetime.now(UTC).strftime("%Y-%m-%d").split("-")
     for filename in os.listdir(folderPath):

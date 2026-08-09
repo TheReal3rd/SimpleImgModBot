@@ -72,7 +72,7 @@ globals.perfManager = PerformanceManager()
 #Logging
 logger = initLogging()
 globals.logger = logger
-loggerTimer = datetime.now(UTC)
+#loggerTimer = datetime.now(UTC) #TODO remove once testing of TimedRotatingFileHandler has passed.
 
 #CLIP
 initClip()
@@ -144,6 +144,14 @@ twitchPostDelay = datetime.now(UTC)
 @client.event
 async def on_ready():
     await registerCommands()
+
+    await client.change_presence(
+        status = discord.Status.online if not globals.configDict["Debug"] else discord.Status.idle,
+        activity=discord.Activity(
+            type=discord.ActivityType.watching,
+            name="The Humans."
+        )
+    )
 
     logger.info(f'Logged in as {client.user}')
     if not updateLoop.is_running():
@@ -319,7 +327,7 @@ async def on_message(message):
                         })
 
                         if globals.configDict["SaveImages"] and imageManager.getSaveLevel() >= globals.ImageSaveModes.EMBBED:
-                            imageManager.saveImage(imageBytes)
+                            imageManager.saveImage(imageBytes, imageSHA256=imageSHA256, imageEmbedd=imageEmb)
 
                         foundMatch = True
                         globals.perfManager.end("Image Scan")
@@ -360,7 +368,7 @@ async def on_message(message):
                     "userID" : message.author.id,
                 })
                 if globals.configDict["SaveImages"]:
-                    imageManager.saveImage(imageBytes)
+                    imageManager.saveImage(imageBytes, imageSHA256=imageSHA256)
 
                 globals.perfManager.end("Image Scan")
 
@@ -504,10 +512,13 @@ async def updateLoop(): # Auto saving and auto cleanup cycles.
 
     writeJson(globals.HITS_PATH, globals.hitTable)
 
-    if hasDaysPassed(loggerTimer):
-        loggerTimer = datetime.now(UTC)
-        logger = initLogging()
-        globals.logger = logger
+    #TODO remove once testing of TimedRotatingFileHandler has passed.
+    #if hasDaysPassed(loggerTimer):
+    #    logger.info("Re-init Logger...")
+    #    loggerTimer = datetime.now(UTC)
+    #    logger = initLogging()
+    #    globals.logger = logger
+    #    logger.info("Logger resumed...")
 
 try:
     client.run(globals.configDict["Token"])

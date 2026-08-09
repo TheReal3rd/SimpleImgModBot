@@ -43,3 +43,8 @@ def getEmbedding(imageBytes):
     emb = model.encode_image(image)
     emb = emb / emb.norm(dim=-1, keepdim=True)
     return emb.cpu().numpy().astype("float32")[0]
+
+def cosineSimilarity(a, b) -> float:
+    a = np.array(a)
+    b = np.array(b)
+    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))

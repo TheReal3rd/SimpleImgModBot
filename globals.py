@@ -52,7 +52,7 @@ DEFAULT_CONFIG = {
     "MonthLogsCleanup" : 2, # The Duration for how long logs will be kept. In Months
     "SaveImages" : False, # Allows the bot to save the images. To allow the administrator to review images to add to the block list.
     "SaveImageConfig" : {
-        "KeepDays" : 20,
+        "KeepDays" : 20, # TODO remove the keep and unify with pending keep days.
         # 0 - BASIC - Save images that aren't banned.
         # 1 - SHA - Save images that got hit by SHA256 check.
         # 2 - EMBBED- Save images that got hit by embbed check.
