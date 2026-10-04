@@ -5,16 +5,16 @@ import globals
 
 from PIL import Image
 from io import BytesIO
-from logging import getLogger
+from logging import getLogger, Logger
 from open_clip import create_model_and_transforms
 
 model = None
 preprocess = None
-device = "cpu"
+device: str = "cpu"
 
-logger = getLogger("ClankerMod")
+logger: Logger = getLogger("ClankerMod")
 
-def initClip():
+def initClip() -> None:
     global model
     global preprocess
     global device

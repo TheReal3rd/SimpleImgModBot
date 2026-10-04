@@ -5,7 +5,7 @@ async def scanCommand(interaction: discord.Interaction, scanrange: int):
     if not await isInteractionAuthorised(interaction):
         return
 
-    messages = await getHistoryWithAttachments(interaction.channel, scanrange)
+    messages = await getHistoryWithAttachments(int(interaction.channel.id), scanrange)
 
     scanNeeded = False
     if len(messages) <= 0:

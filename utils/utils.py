@@ -2,23 +2,23 @@ import os
 
 from pathlib import Path
 from datetime import datetime, timedelta, UTC
-from logging import getLogger
+from logging import Logger, getLogger
 from json import load, dump, JSONDecodeError
 
 import globals
 
-logger = getLogger("ClankerMod")
+logger: Logger = getLogger("ClankerMod")
 
 #Strings
-def limitString(msg, maxLength, end="..."):
+def limitString(msg: str, maxLength: int, end:str="...") -> list[str]:
     if len(msg) >= maxLength + 2:
         return msg[:maxLength - (len(end) + 3)].rsplit(" ", 1)[0] + end
     return msg
 
-def pageString(text, maxLength):
-    lines = text.splitlines(keepends=True)
-    pages = []
-    workingPage = ""
+def pageString(text: str, maxLength: int) -> list[str]:
+    lines: list[str] = text.splitlines(keepends=True)
+    pages: list[str] = []
+    workingPage: str = ""
 
     for line in lines:
         lineLength = len(line)
@@ -34,7 +34,7 @@ def pageString(text, maxLength):
     return pages
 
 #Json
-def readJson(path, default=None):
+def readJson(path, default=None) -> dict:
     try:
         with open(path, "r", encoding="utf-8") as f:
             resultData = load(f)
@@ -48,14 +48,14 @@ def readJson(path, default=None):
     except (FileNotFoundError, JSONDecodeError):
         return default if default is not None else {}
 
-def writeJson(path, data):
+def writeJson(path: str, data: dict) -> None:
     Path(path).parent.mkdir(parents=True, exist_ok=True)
 
     with open(path, "w", encoding="utf-8") as f:
         dump(data, f, indent=4, ensure_ascii=False)
 
-def getFiles(folderPath, endWithFilter):
-    result = []
+def getFiles(folderPath: str, endWithFilter: str) -> list[str]:
+    result: list[str] = []
     for filename in os.listdir(folderPath):
         filePath = os.path.join(folderPath, filename)
 
@@ -69,10 +69,10 @@ def getFiles(folderPath, endWithFilter):
 
     return result
 
-def hasDaysPassed(startTime, days=1) -> bool:
+def hasDaysPassed(startTime: datetime, days: int = 1) -> bool:
     return datetime.now(UTC) >= startTime + timedelta(days=days)
 
-def loadImageFolder(folderPath):
+def loadImageFolder(folderPath: str) -> None:
     for filename in os.listdir(folderPath):
         filePath = os.path.join(folderPath, filename)
         if not os.path.isfile(filePath):
@@ -104,7 +104,7 @@ def loadImageFolder(folderPath):
         except Exception as e:
             logger.error(f"Failed to process image: {filename} | {e}")
 
-def dirCheck(path, create=True) -> bool:
+def dirCheck(path: str, create=True) -> bool:
     directory = Path(path)
 
     if directory.exists() and directory.is_dir():

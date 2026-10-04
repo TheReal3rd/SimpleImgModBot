@@ -1,4 +1,11 @@
 from enum import IntEnum, StrEnum
+from logging import Logger
+
+from discord.ext import commands
+from managers.fingerprintDataManager import FingerprintDataManager
+from managers.pendingDataManager import PendingDataManager
+from managers.performanceManger import PerformanceManager
+from managers.imageManager import ImageManager
 
 class PendingType(StrEnum):
     IMAGE_BAN = "imageBan"
@@ -11,29 +18,34 @@ class ImageSaveModes(IntEnum):
     EMBBED = 2
     ALL = 3
 
+class EmbedPostType(IntEnum):
+    IMG_POST = 0
+    IMG_BAN_SHA = 1
+    IMG_BAN_EMB = 2
+
 #Const
-SERVER_ID = -1
-CHANNEL_ID = -1
+SERVER_ID: int = -1
+CHANNEL_ID: int = -1
 
-RESENFOR_ID = 332634195941654529
-REGIONAL_L = "\U0001F1F1"
-MAXIMUM_L = 30 # So im not constantly oblitarating him.
+RESENFOR_ID: int = 332634195941654529
+REGIONAL_L: str = "\U0001F1F1"
+MAXIMUM_L: int = 30 # So im not constantly oblitarating him.
 
-THUMB_UP = "\U0001F44D"
+THUMB_UP: str = "\U0001F44D"
 
-MSG_LEN_LIMIT = 2000
-EMBED_LEN_LIMIT = 4095
-SHA256_CHAR_LEN = 64
-SCAN_BATCH_SIZE = 15
-IMG_EXTENSIONS = [".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff", ".tif", ".heic", ".heif", ".avif", ".jfif",] 
+MSG_LEN_LIMIT: int = 2000
+EMBED_LEN_LIMIT: int = 4095
+SHA256_CHAR_LEN: int = 64
+SCAN_BATCH_SIZE: int = 15
+IMG_EXTENSIONS: list[str] = [".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff", ".tif", ".heic", ".heif", ".avif", ".jfif",] 
 # Few formats aren't included due to not working with current set up nor scope.
 
-CONFIG_PATH = "config.json"
-IMAGE_PATH = "working_images/"
+CONFIG_PATH: str = "config.json"
+IMAGE_PATH: str = "working_images/"
 
-DEFAULT_CONFIG = {
-    "ServerID" : "",
-    "ChannelID" : "",
+DEFAULT_CONFIG: dict = {
+    "ServerID" : 0,
+    "ChannelID" : 0,
     "Token" : "",
     "EmbeddingThreshold" : 0.87,
     "Debug" : False, # Disables Kick, Ban and image deletions for db calls used to test whether the operations reach them.
@@ -41,6 +53,7 @@ DEFAULT_CONFIG = {
     "JokesMemes" : True, # Adding this so if someone does use this they can disable my joke out of the bot. 
     "RequiredRoleID" : "", #role id. Replace this with one for your server.
     "Twitch": {
+        "Enabled" : False, # Force Enablement and Disablement.
         "TwitchChannel": "",  # Twitch channel log-in name of the channel you want live notifications for
         "TokenCache": "", # filepath to a json file containing the OAuth tokens
         "AppId": "",  # Twitch App ID.
@@ -52,7 +65,6 @@ DEFAULT_CONFIG = {
     "MonthLogsCleanup" : 2, # The Duration for how long logs will be kept. In Months
     "SaveImages" : False, # Allows the bot to save the images. To allow the administrator to review images to add to the block list.
     "SaveImageConfig" : {
-        "KeepDays" : 20, # TODO remove the keep and unify with pending keep days.
         # 0 - BASIC - Save images that aren't banned.
         # 1 - SHA - Save images that got hit by SHA256 check.
         # 2 - EMBBED- Save images that got hit by embbed check.
@@ -61,7 +73,7 @@ DEFAULT_CONFIG = {
     }
 }
 
-ABT_MSG = [
+ABT_MSG: list[str] = [
     "4d61646520627920337264",
     "Resenfor Smells.",
     "Dargo is a cutie pie! :3",
@@ -72,22 +84,22 @@ ABT_MSG = [
     "3.1415926535",
 ]
 
-HITS_PATH = "hits.json" # Was only for Resenfor react but used to store other useful data.
-DEFAULT_HITTABLE = {
+HITS_PATH: str = "hits.json" # Was only for Resenfor react but used to store other useful data.
+DEFAULT_HITTABLE: dict = {
     "Img_Scans" : 0,
     "Img_Bans" : 0,
     "BanCount" : 0,
 }
 
 #General
-client = None
-logger = None
-databaseManager = None
-pendingDatabaseManager = None
-perfManager = None
-imageManager = None
-configDict = {}
-hitTable = {}
+client: commands.Bot = None
+logger: Logger = None
+databaseManager: FingerprintDataManager = None
+pendingDatabaseManager: PendingDataManager = None
+perfManager: PerformanceManager = None
+imageManager: ImageManager = None
+configDict: dict = {}
+hitTable: dict = {}
 
 #global Funcs
 

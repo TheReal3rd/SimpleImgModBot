@@ -19,10 +19,10 @@ from twitchAPI.object.eventsub import StreamOnlineEvent
 
 import globals
 
-from managers.fingerprintDataManager import *
-from managers.pendingDataManager import *
-from managers.performanceManger import *
-from managers.imageManager import *
+from managers.fingerprintDataManager import FingerprintDataManager
+from managers.pendingDataManager import PendingDataManager, Tables
+from managers.performanceManger import PerformanceManager
+from managers.imageManager import ImageManager
 
 from utils.utils import *
 from utils.discordUtils import *
@@ -52,13 +52,13 @@ globals.configDict = readJson(globals.CONFIG_PATH, globals.DEFAULT_CONFIG)
 writeJson(globals.CONFIG_PATH, globals.configDict)
 
 # Processing queue for scans
-scanQueues = {}
-resultQueues = {}
-purgeQueues = {}
+scanQueues: dict = {}
+resultQueues: dict = {}
+purgeQueues: dict = {}
 
 #Resenfor Hate :angy: :fist:
-hateTimer = datetime.now(UTC)
-resLHits = 0
+hateTimer: datetime = datetime.now(UTC)
+resLHits: int = 0
 
 if globals.configDict["JokesMemes"]:
     globals.DEFAULT_HITTABLE["L_Res"] = 0
@@ -67,10 +67,10 @@ if globals.configDict["JokesMemes"]:
 globals.hitTable = readJson(globals.HITS_PATH, globals.DEFAULT_HITTABLE)
 
 #Perf
-globals.perfManager = PerformanceManager()
+globals.perfManager: PerformanceManager = PerformanceManager()
 
 #Logging
-logger = initLogging()
+logger: Logger = initLogging()
 globals.logger = logger
 #loggerTimer = datetime.now(UTC) #TODO remove once testing of TimedRotatingFileHandler has passed.
 
@@ -83,15 +83,15 @@ intents.members = True
 intents.reactions = True
 intents.messages = True 
 
-client = commands.Bot(command_prefix = "!" ,intents=intents)
+client: commands.Bot = commands.Bot(command_prefix = "!" ,intents=intents)
 globals.client = client
 
 #Banned image load and hash.
-databaseManager = FingerprintDataManager()
+databaseManager: FingerprintDataManager = FingerprintDataManager()
 globals.databaseManager = databaseManager
 loadImageFolder("images")
 
-pendingDatabaseManager = PendingDataManager()
+pendingDatabaseManager: PendingDataManager = PendingDataManager()
 globals.pendingDatabaseManager = pendingDatabaseManager
 
 if globals.configDict["SaveImages"]:
@@ -161,7 +161,7 @@ async def on_ready():
         #To prevent spam of the warning msg in channels.
         cancelMsg = False
         msg = "Warning the bot is in a testing state. Kick, Ban and more will do nothing."
-        history = await getBotMessageHistory(globals.CHANNEL_ID, 20)
+        history = await getBotMessageHistory(int(globals.CHANNEL_ID), 20)
         for historyMsg in history: 
             if historyMsg.content == msg:
                 cancelMsg = True
@@ -178,6 +178,10 @@ async def on_ready():
         logger.warning("No Twitch configuration found. Continuing without Twitch integration")
         return
     config = globals.configDict['Twitch']
+
+    if not config["Enabled"]:
+        logger.info("Twitch Notify has been disabled in configuration. (Tokens Could Expire...)")
+        return
 
     appId = config['AppId']
     appSecret = config['AppSecret']
@@ -214,12 +218,8 @@ async def registerCommands():
     client.tree.copy_global_to(guild=guild)
     await client.tree.sync(guild=guild)
 
-@client.event
-async def on_message(message):
+async def updateLowResL(message):
     global resLHits, hateTimer
-    if message.author == client.user:
-        return
-
     if globals.configDict["JokesMemes"]:
         if resLHits < globals.MAXIMUM_L and globals.hitTable["L_Halt"]:
             if message.author.id == globals.RESENFOR_ID:
@@ -232,9 +232,15 @@ async def on_message(message):
         if hasDaysPassed(hateTimer):
             resLHits = 0
             #globals.hitTable["L_Halt"] = True ## Hehehe. So boring.
+
+@client.event
+async def on_message(message):
+    if message.author == client.user:
+        return
+
+    await updateLowResL(message)
     
     authorUsername = message.author.name
-    channelName = message.channel.name
 
     for attachment in message.attachments:
         globals.hitTable["Img_Scans"] += 1
@@ -252,22 +258,7 @@ async def on_message(message):
 
                 timeoutResult = await timeoutUser(message.author)
 
-                embed = discord.Embed (
-                    title = "Banned Image",
-                    description = f"Image matching in banned list was posted in {channelName} by {authorUsername}.",
-                    color=discord.Color.red()
-                )
-                embed.add_field(
-                    name="SHA256",
-                    value = f"{imageSHA256}",
-                    inline = False
-                )
-                embed.add_field(
-                    name="Timeout Result:",
-                    value = f"{timeoutResult}",
-                    inline = False
-                )
-                embed.set_footer(text="React with 👍 to ban the user")
+                embed = buildImageEmbed(message, globals.EmbedPostType.IMG_BAN_SHA, timeoutResult = timeoutResult, shaEmbedScore = str(imageSHA256))
 
                 confirmButtonView = BanUserView(authorUsername)
                 msgID = await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, embed= embed, view= confirmButtonView)
@@ -299,22 +290,7 @@ async def on_message(message):
                         logger.info(f"Embedding search has found a high probability match with score: {embScoreResult}\nsha256:{sha256Result}")
                         timeoutResult = await timeoutUser(message.author)
 
-                        embed = discord.Embed (
-                            title = "Banned Image",
-                            description = f"Image matching in banned list was posted in {channelName} by {authorUsername}.",
-                            color=discord.Color.red()
-                        )
-                        embed.add_field(
-                            name="Embedding Score",
-                            value = f"{embScoreResult}",
-                            inline = False
-                        )
-                        embed.add_field(
-                            name="Timeout Result:",
-                            value = f"{timeoutResult}",
-                            inline = False
-                        )
-                        embed.set_footer(text="React with 👍 to ban the user")
+                        embed = buildImageEmbed(message, globals.EmbedPostType.IMG_BAN_EMB, timeoutResult = timeoutResult, shaEmbedScore = str(embScoreResult))
 
                         confirmButtonView = BanUserView(authorUsername)
                         msgID = await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, embed=embed, view=confirmButtonView)
@@ -336,24 +312,11 @@ async def on_message(message):
                 if foundMatch:
                     break
             
+            # Handling the notify of none finger printed images. So not currently banned images.
             if not foundMatch:
-                logger.info(f"Image has been posted in {channelName} by {authorUsername} sha256: {imageSHA256}")
+                logger.info(f"Image has been posted in {message.channel.name} by {authorUsername} sha256: {imageSHA256}")
 
-                embed = discord.Embed (
-                    title = "Image posted",
-                    description = f"Image has been posted in {channelName} by {authorUsername}.",
-                    color=discord.Color.green()
-                )
-                embed.add_field(
-                    name="SHA256",
-                    value = f"{imageSHA256}",
-                    inline = False
-                )
-                embed.add_field(
-                    name = "Jump",
-                    value = f"[Jump to message](https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id})"
-                )
-                embed.set_footer(text="React with 👍 to blacklist")
+                embed = buildImageEmbed(message, globals.EmbedPostType.IMG_POST, shaEmbedScore = str(imageSHA256))
 
                 confirmButtonView = BanImageView()
                 msgID = await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, embed = embed, view = confirmButtonView)
@@ -374,7 +337,7 @@ async def on_message(message):
 
 #Combined the functionality into actionView.py This is now the main section.
 @client.event
-async def on_raw_reaction_add(payload): #TODO remove this and replace it with the actions.
+async def on_raw_reaction_add(payload):
     user = await getMember(globals.SERVER_ID, payload.user_id)
     reactMessageID = str(payload.message_id)
 
@@ -384,7 +347,6 @@ async def on_raw_reaction_add(payload): #TODO remove this and replace it with th
     if payload.emoji.name != globals.THUMB_UP:
         return
 
-    #Note best not move auth check in first check list as this get applied to all reactions of thumb_up. ***
     if pendingDatabaseManager.exists(Tables.CHECKS, reactMessageID): # React image ban.
 
         view = ConfirmView(reactMessageID, globals.PendingType.IMAGE_BAN)
@@ -396,13 +358,61 @@ async def on_raw_reaction_add(payload): #TODO remove this and replace it with th
             view = ConfirmView(reactMessageID, globals.PendingType.USER_BAN)
             await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, f"Confirm this user ban:", view=view) 
 
-            
+
+async def processAttachments(message, deletions: bool = True, moderation: bool = False):
+    resultDict = {
+        "violating" : False,
+        "timeOutResult": False,
+    } 
+
+    for attachment in message.attachments:
+        if attachment.content_type and attachment.content_type.startswith("image/"):
+            imageBytes = await attachment.read()
+                    
+            imageSHA256 = calcSHA256(imageBytes)
+            dbFetchSHA = databaseManager.get(imageSHA256)
+
+            if dbFetchSHA != None and dbFetchSHA["sha256"] == imageSHA256:
+                if moderation:
+                    resultDict["timeOutResult"] = await timeoutUser(message.author)
+
+                if deletions:
+                    await message.delete()
+                resultDict["violating"] = True
+                return resultDict
+            else:
+                imageEmb = calcEmbedding(imageBytes)
+                dbSearchResult = databaseManager.search(imageEmb, 8)
+
+                escapeLoop = False
+                for resultData in dbSearchResult:
+                    embScoreResult = resultData["score"]
+                    sha256Result = resultData["sha256"]
+
+                    embeddingMatch =  embScoreResult >= globals.configDict["EmbeddingThreshold"]
+                    if embeddingMatch:
+                        if moderation:
+                            resultDict["timeOutResult"] = await timeoutUser(message.author)
+
+                        if deletions:
+                            await message.delete()
+              
+                        resultDict["violating"] = True
+                        return resultDict
+
+    return resultDict
+
 @tasks.loop(seconds=5)
 async def scanLoop(): # Manual scan command - commands.scanCommand
+    global resultQueues
     globals.perfManager.begin("Scan Loop")
     finished = False
     toDelete = []
+
     for key in scanQueues.keys():
+
+        if not key in resultQueues.keys():
+            resultQueues[key] = 0
 
         msgListSize = len(scanQueues[key])
         if msgListSize <= 0:
@@ -415,47 +425,11 @@ async def scanLoop(): # Manual scan command - commands.scanCommand
 
         for index in range(0, min(globals.SCAN_BATCH_SIZE, msgListSize)):
             message = scanQueues[key].pop()
-            for attachment in message.attachments:
-                if attachment.content_type and attachment.content_type.startswith("image/"):
-                    imageBytes = await attachment.read()
-                    
-                    imageSHA256 = calcSHA256(imageBytes)
-                    dbFetchSHA = databaseManager.get(imageSHA256)
+            resultDict = await processAttachments(message, True, True)
+            if resultDict["violating"]:
+                resultQueues[key]+= 1
+            sleep(1)
 
-                    if dbFetchSHA != None and dbFetchSHA["sha256"] == imageSHA256:
-                        timeoutResult = await timeoutUser(message.author)
-                        await message.delete()
-                        sleep(1)
-
-                        if not key in resultQueues.keys():
-                            resultQueues[key] = 1
-                        else:
-                            resultQueues[key]+= 1
-
-                        break
-                    else:
-                        imageEmb = calcEmbedding(imageBytes)
-                        dbSearchResult = databaseManager.search(imageEmb, 8)
-
-                        escapeLoop = False
-                        for resultData in dbSearchResult:
-                            embScoreResult = resultData["score"]
-                            sha256Result = resultData["sha256"]
-
-                            embeddingMatch =  embScoreResult >= globals.configDict["EmbeddingThreshold"]
-                            if embeddingMatch:
-                                await message.delete()
-                                sleep(1)
-                                escapeLoop = True
-
-                                if not key in resultQueues.keys():
-                                    resultQueues[key] = 1
-                                else:
-                                    resultQueues[key]+= 1
-                                break
-                        if escapeLoop:
-                            break
-    
     if len(toDelete) != 0:
         for key in toDelete:
             del resultQueues[key]
@@ -485,7 +459,6 @@ async def purgeLoop(): # purge loop - commands.purgemsgCommand
             message = purgeQueues[key].pop()
             await message.delete()
             sleep(1)
-
             if not key in resultQueues.keys():
                 resultQueues[key] = 1
             else:

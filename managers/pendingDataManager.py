@@ -5,6 +5,7 @@ from datetime import datetime
 from enum import StrEnum
 
 from utils.utils import hasDaysPassed
+from utils.discordUtils import getMessage
 
 import globals
 
@@ -294,7 +295,7 @@ class PendingDataManager():
                 toDelete = []
                 for pending in resultList:
                     if hasDaysPassed(datetime.fromisoformat(pending["time"]), days=globals.configDict["PendingKeepDays"]):
-                        logger.info(f"Pending has expired: msgID: {pending["msgID"]}")
+                        globals.logger.info(f"Pending has expired: msgID: {pending["msgID"]}")
                         messageObj = await getMessage(globals.SERVER_ID, globals.CHANNEL_ID, pending["msgID"])
                         if messageObj:
                             messageObj.delete()

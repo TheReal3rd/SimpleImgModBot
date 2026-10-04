@@ -5,6 +5,7 @@ from sys import stdout
 from collections import deque
 from datetime import datetime, UTC
 from pathlib import Path
+from logging import Logger
 from logging.handlers import TimedRotatingFileHandler
 
 import globals
@@ -20,7 +21,7 @@ def initLogging():
 
     logBuffer.clear()
 
-    logger = logging.getLogger("ClankerMod")
+    logger: Logger = logging.getLogger("ClankerMod")
     logger.setLevel(logging.DEBUG)
     logger.propagate = False
 

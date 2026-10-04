@@ -1,5 +1,3 @@
-import matplotlib.pyplot as plt
-
 from time import perf_counter
 from statistics import median, fmean, mode
 from io import BytesIO
@@ -101,6 +99,7 @@ class PerformanceManager:
         if self._isEmpty():
             return None
 
+        import matplotlib.pyplot as plt
         plt.figure(figsize=(9, 5))
 
         for ops, times in self.result.items():

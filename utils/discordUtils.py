@@ -1,3 +1,4 @@
+from sre_compile import dis
 import discord
 
 from discord import app_commands
@@ -11,25 +12,35 @@ logger = getLogger("ClankerMod")
 
 # Auth Checks
 
-async def isInteractionAuthorised(interaction: discord.Interaction):
+async def isInteractionAuthorised(interaction: discord.Interaction) -> bool:
     return await isInterationAdmin(interaction.user) and await isInteractionAuthServer(interaction)
 
-async def isInteractionAuthServer(interaction: discord.Interaction, responseMSG="This is not the guild i serve.", loggerMSG = "no actions where performed."):
-    if not str(interaction.guild.id) == globals.SERVER_ID:
+async def isInteractionAuthServer(
+                                interaction: discord.Interaction, 
+                                responseMSG="This is not the guild i serve.", 
+                                loggerMSG = "no actions where performed."
+                            ) -> bool:
+    if not interaction.guild.id == globals.SERVER_ID:
         await interaction.response.send_message(responseMSG, ephemeral=True)
-        logger.warning(f"Attempted admin command or action called by: {interaction.user.name} {loggerMSG}")
+        logger.warning(f"[ServerAuth] Attempted admin command or action called by: {interaction.user.name} {loggerMSG}")
         return False
     return True
 
-async def isInterationAdmin(user, responseMSG="You're not an administrator.", loggerMSG="no actions where performed.", interaction: discord.Interaction = None):
-    if not user.guild_permissions.administrator:
+async def isInterationAdmin(
+                            user: discord.User, 
+                            responseMSG="You're not an administrator.", 
+                            loggerMSG="no actions where performed.", 
+                            interaction: discord.Interaction = None
+                        ) -> bool:
+    member = await getMember(globals.SERVER_ID, user.id)
+    if not member.guild_permissions.administrator:
         if interaction != None:
             await interaction.response.send_message(responseMSG, ephemeral=True)
-        logger.warning(f"Attempted admin command or action called by: {user.name} {loggerMSG}")
+        logger.warning(f"[AdminAuth] Attempted admin command or action called by: {user.name} {loggerMSG}")
         return False
     return True
 
-async def failureMessage(loggerMSG, responseMSG, interaction=None):
+async def failureMessage(loggerMSG: str, responseMSG: str, interaction: discord.Interaction=None) -> None:
     if interaction != None:
         await interaction.response.send_message(responseMSG) 
     else:
@@ -38,7 +49,7 @@ async def failureMessage(loggerMSG, responseMSG, interaction=None):
 
 #Actions
 
-async def timeoutUser(user, days=28):
+async def timeoutUser(user: discord.User, days:int=28) -> bool:
     if globals.configDict["Debug"]:
         logger.info(f"IN TEST MODE!!! User would have been timedout. User: {user.name}")
         return True
@@ -51,7 +62,7 @@ async def timeoutUser(user, days=28):
         logger.error("Missing required permissions to timeout user.")
     return False
 
-async def kickUser(user, authorisedUser=""):
+async def kickUser(user: discord.User, authorisedUser:str="") -> bool:
     if globals.configDict["Debug"]:
         logger.info(f"IN TEST MODE!!! User would have been kicked. User: {user.name} Auth by: {authorisedUser}")
         return True
@@ -64,7 +75,7 @@ async def kickUser(user, authorisedUser=""):
         logger.error("Missing required permissions to kick user.")
     return False
 
-async def banUser(user, authorisedUser="", applyCounter: bool = True):
+async def banUser(user: discord.User, authorisedUser:str="", applyCounter: bool = True) -> bool:
     if globals.configDict["Debug"]:
         logger.info(f"IN TEST MODE!!! User would have been banned. User: {user.name} Auth by: {authorisedUser}")
         return True
@@ -84,7 +95,7 @@ async def banUser(user, authorisedUser="", applyCounter: bool = True):
 
 #Fetching
 
-async def getMember(serverID, userID):
+async def getMember(serverID, userID) -> discord.member:
     guild = globals.client.get_guild(serverID)
     if guild is None:
         guild = await globals.client.fetch_guild(serverID)
@@ -95,7 +106,7 @@ async def getMember(serverID, userID):
 
     return member
 
-async def sendMessage(serverID, channelID, message="", embed = None, view=None):
+async def getChannel(serverID: int, channelID: int) -> discord.channel:
     guild = globals.client.get_guild(serverID)
     if not guild:
         guild = await globals.client.fetch_guild(serverID)
@@ -103,43 +114,78 @@ async def sendMessage(serverID, channelID, message="", embed = None, view=None):
     channel = guild.get_channel(channelID)
     if not channel:
         channel = await globals.client.fetch_channel(channelID)
+    return channel
 
+async def sendMessage(serverID: int, channelID: int, message:str="", embed: discord.Embed = None, view: discord.ui.View=None) -> int:
+    channel = await getChannel(serverID, channelID)
     msg = await channel.send(message, embed = embed, view = view)
     return msg.id
 
-async def getMessage(serverID, channelID, messageID):
-    guild = globals.client.get_guild(serverID)
-    if guild is None:
-        guild = await globals.client.fetch_guild(serverID)
-
-    channel = guild.get_channel(channelID)
-    if channel is None:
-        channel = await globals.client.fetch_channel(channelID)
-
+async def getMessage(serverID: int, channelID: int, messageID: int) -> discord.Message:
+    channel = await getChannel(serverID, channelID)
     message = await channel.fetch_message(messageID)
     return message
 
-async def getHistoryWithAttachments(channel, range):
+async def getHistoryWithAttachments(channelID: int, range: int) -> list[discord.Message]:
+    channel = await getChannel(globals.SERVER_ID, channelID)
     messages = []
     async for message in channel.history(limit=range):
         if len(message.attachments) != 0:
             messages.append(message)
     return messages
 
-async def getBotMessageHistory(channel, range):
-    if type(channel) == str:
-        guild = globals.client.get_guild(globals.SERVER_ID)
-        if guild is None:
-            guild = await globals.client.fetch_guild(globals.SERVER_ID)
-
-        channelID = channel
-
-        channel = guild.get_channel(channelID)
-        if channel is None:
-            channel = await globals.client.fetch_channel(channelID)
-
+async def getBotMessageHistory(channelID: int, range: int) -> list[discord.Message]:
+    channel = await getChannel(globals.SERVER_ID, channelID)
     messages = []
     async for message in channel.history(limit=range):
         if message.author.id == globals.client.user.id:
             messages.append(message)
     return messages
+
+def buildImageEmbed(message, embedType, timeoutResult: bool = False, shaEmbedScore: str = ""):
+    authorUsername = message.author.name
+    channelName = message.channel.name
+
+    embed = None
+    if not embedType == globals.EmbedPostType.IMG_POST:
+        embed = discord.Embed (
+            title = "Banned Image",
+            description = f"Image matching in banned list was posted in {channelName} by {authorUsername}.",
+            color=discord.Color.red()
+        )
+    else:
+        embed = discord.Embed (
+            title = "Image posted",
+            description = f"Image has been posted in {channelName} by {authorUsername}.",
+            color=discord.Color.green()
+        )
+
+    match embedType:
+        case globals.EmbedPostType.IMG_BAN_SHA | globals.EmbedPostType.IMG_POST:
+            embed.add_field(
+                name="SHA256",
+                value = f"{shaEmbedScore}",
+                inline = False
+            )
+
+        case globals.EmbedPostType.IMG_BAN_EMB:
+            embed.add_field(
+                name="Embedding Score",
+                value = f"{shaEmbedScore}",
+                inline = False
+            )
+
+    if not embedType == globals.EmbedPostType.IMG_POST:
+        embed.add_field(
+            name="Timeout Result:",
+            value = f"{timeoutResult}",
+            inline = False
+        )
+        embed.set_footer(text="React with 👍 to ban the user")
+    else:
+        embed.add_field(
+            name = "Jump",
+            value = f"[Jump to message](https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id})"
+        )
+        embed.set_footer(text="React with 👍 to blacklist")
+    return embed

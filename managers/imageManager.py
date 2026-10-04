@@ -98,7 +98,7 @@ class ImageManager():
             monthDiff = abs(int(nameSplit[1]) - int(timeDateNow[1]))
             yearDiff = abs(int(nameSplit[0]) - int(timeDateNow[0]))
 
-            monthMaxDura = self.imgConfigDict["KeepDays"]
+            monthMaxDura = globals.configDict["PendingKeepDays"]
             YEAR_MAX_DURA = 1
 
             if yearDiff >= YEAR_MAX_DURA or monthDiff >= monthMaxDura:

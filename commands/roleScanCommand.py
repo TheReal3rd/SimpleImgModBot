@@ -16,7 +16,7 @@ async def scanCommand(interaction: discord.Interaction, maxlimit: int = 0):
         return
 
     requiredRoleID = globals.configDict["RequiredRoleID"]
-    if not requiredRoleID or requiredRoleID.strip() == "":
+    if not requiredRoleID or requiredRoleID == 0:
         msg = "No required Role ID provided."
         logger.info(f"Roles scan called by: {interaction.user.name} {msg}")
         await interaction.response.send_message(msg)
@@ -35,7 +35,7 @@ async def scanCommand(interaction: discord.Interaction, maxlimit: int = 0):
             continue
 
         for role in member.roles:
-            if str(role.id) == requiredRoleID:
+            if role.id == requiredRoleID:
                 badAccount = False
                 continue 
 
