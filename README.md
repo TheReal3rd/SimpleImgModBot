@@ -4,11 +4,10 @@ Basic discord image banning bot with main goal to prevent and block scam image p
 ## TODO
 * Add video hashing (Low priority just a feature not a needed component).
 * Add image saving for further processing and checking by administrators. (Include a schedualed removal to prevent possible certain type of content being held.)
-* Check the ActionView and React - Compare and decide to combine into a single func. Possibly too challenging.
 
 ## Dev Info
 This bot detects messages with images within their posts. Which are then Hashed into sha256 alongside fuzzy hashed. Which are then lookup into the fingerprint database.
-If the database finds a match the image will be deleted and the posting user will be timedout for 28 days. Which results in a ban post confirmation being printed into the admin channel.
+If the database finds a match the image will be deleted and the posting user will be timed out for 28 days. Which results in a ban post confirmation being printed into the admin channel.
 Where the user can confirm to ban the user.
 The bot stricktly written to **not ban user without administrators confirmation**. To prevent false bans and removals.
 
