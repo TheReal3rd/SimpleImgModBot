@@ -298,7 +298,7 @@ class PendingDataManager():
                         globals.logger.info(f"Pending has expired: msgID: {pending["msgID"]}")
                         messageObj = await getMessage(globals.SERVER_ID, globals.CHANNEL_ID, pending["msgID"])
                         if messageObj:
-                            messageObj.delete()
+                            await messageObj.delete()
 
                         toDelete.append(pending["msgID"])
                         continue
