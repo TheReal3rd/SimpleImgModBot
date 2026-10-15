@@ -237,7 +237,7 @@ async def handleBannedImage(message: discord.Message, shaEmbedScore):
 
     embed = buildImageEmbed(message, globals.EmbedPostType.IMG_BAN_SHA, timeoutResult = timeoutResult, shaEmbedScore = str(shaEmbedScore))
 
-    confirmButtonView = BanUserView(authorUsername)
+    confirmButtonView = BanUserView(message.author.name)
     msgID = await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, embed= embed, view= confirmButtonView)
     await message.delete()
 
@@ -410,7 +410,7 @@ async def scanLoop(): # Manual scan command - commands.scanCommand
 
         msgListSize = len(scanQueues[key])
         if msgListSize <= 0:
-            msg =  f"Scan completed. {resultQueues[key]} violating images have been found and deleted."
+            msg =  f"Scan completed. {resultQueues[key]} violating images has been found and deleted."
             logger.info(msg)
             await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, msg)
             toDelete.append(key)
