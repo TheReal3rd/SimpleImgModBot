@@ -291,21 +291,24 @@ class PendingDataManager():
     async def cleanup(self):
         for table in Tables:
             resultList = self.fetchAll(table)
-            if resultList != None and len(resultList) != 0:
-                toDelete = []
-                for pending in resultList:
-                    if hasDaysPassed(datetime.fromisoformat(pending["time"]), days=globals.configDict["PendingKeepDays"]):
-                        globals.logger.info(f"Pending has expired: msgID: {pending["msgID"]}")
-                        messageObj = await getMessage(globals.SERVER_ID, globals.CHANNEL_ID, pending["msgID"])
-                        if messageObj:
-                            await messageObj.delete()
+            if resultList == None and len(resultList) == 0:
+                continue
+            
+            toDelete = []
+            for pending in resultList:
+                if not hasDaysPassed(datetime.fromisoformat(pending["time"]), days=globals.configDict["PendingKeepDays"]):
+                    continue
 
-                        toDelete.append(pending["msgID"])
-                        continue
+                globals.logger.info(f"Pending has expired: msgID: {pending["msgID"]}")
+                messageObj = await getMessage(globals.SERVER_ID, globals.CHANNEL_ID, pending["msgID"])
+                if messageObj:
+                    await messageObj.delete()
 
-                if len(toDelete) != 0:
-                    for key in toDelete:
-                        self.deleteEntry(table, key)
+                toDelete.append(pending["msgID"])
+
+            if len(toDelete) != 0:
+                for key in toDelete:
+                    self.deleteEntry(table, key)
 
 
 if __name__ == "__main__":

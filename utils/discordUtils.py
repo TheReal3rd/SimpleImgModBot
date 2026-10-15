@@ -95,7 +95,7 @@ async def banUser(user: discord.User, authorisedUser:str="", applyCounter: bool 
 
 #Fetching
 
-async def getMember(serverID, userID) -> discord.member:
+async def getMember(serverID: int, userID: int) -> discord.member:
     guild = globals.client.get_guild(serverID)
     if guild is None:
         guild = await globals.client.fetch_guild(serverID)
@@ -189,3 +189,9 @@ def buildImageEmbed(message, embedType, timeoutResult: bool = False, shaEmbedSco
         )
         embed.set_footer(text="React with 👍 to blacklist")
     return embed
+
+def hasRole(member: discord.member, roleID: int) -> bool:
+    for role in member.roles:
+        if role.id == roleID:
+            return True
+    return False

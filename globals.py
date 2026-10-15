@@ -82,6 +82,7 @@ ABT_MSG: list[str] = [
     "Resenfor is sometimes cute.",
     "E",
     "3.1415926535",
+    "Beep Boop..."
 ]
 
 HITS_PATH: str = "hits.json" # Was only for Resenfor react but used to store other useful data.

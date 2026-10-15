@@ -72,7 +72,6 @@ globals.perfManager: PerformanceManager = PerformanceManager()
 #Logging
 logger: Logger = initLogging()
 globals.logger = logger
-#loggerTimer = datetime.now(UTC) #TODO remove once testing of TimedRotatingFileHandler has passed.
 
 #CLIP
 initClip()
@@ -111,7 +110,7 @@ async def handle_channel_online(data: StreamOnlineEvent):
     channel_name = data.event.broadcaster_user_name
     stream_url = f'https://twitch.tv/{data.event.broadcaster_user_login}'
 
-    config = globals.configDict['Twitch']
+    config = globals.configDict['Twitch'] # TODO update this to use int id's but as its being 
     notifChannel: str = config['NotifChannel']
     notifRoleID: str = config['NotifRoleID']
     emojiNameID: str = config["NotifEmojiNameID"] # Server emojis have :name:id
@@ -233,6 +232,21 @@ async def updateLowResL(message):
             resLHits = 0
             #globals.hitTable["L_Halt"] = True ## Hehehe. So boring.
 
+async def handleBannedImage(message: discord.Message, shaEmbedScore):
+    timeoutResult = await timeoutUser(message.author)
+
+    embed = buildImageEmbed(message, globals.EmbedPostType.IMG_BAN_SHA, timeoutResult = timeoutResult, shaEmbedScore = str(shaEmbedScore))
+
+    confirmButtonView = BanUserView(authorUsername)
+    msgID = await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, embed= embed, view= confirmButtonView)
+    await message.delete()
+
+    pendingDatabaseManager.submitPending(Tables.BANS, {
+        "msgID" : msgID,
+        "time" : datetime.now(UTC).isoformat(),
+        "userID" : message.author.id,
+    })
+
 @client.event
 async def on_message(message):
     if message.author == client.user:
@@ -256,19 +270,7 @@ async def on_message(message):
             if dbFetchSHA != None and dbFetchSHA["sha256"] == imageSHA256:
                 logger.info(f"Image matching with banned list of sha256: {imageSHA256}")
 
-                timeoutResult = await timeoutUser(message.author)
-
-                embed = buildImageEmbed(message, globals.EmbedPostType.IMG_BAN_SHA, timeoutResult = timeoutResult, shaEmbedScore = str(imageSHA256))
-
-                confirmButtonView = BanUserView(authorUsername)
-                msgID = await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, embed= embed, view= confirmButtonView)
-                await message.delete()
-
-                pendingDatabaseManager.submitPending(Tables.BANS, {
-                    "msgID" : msgID,
-                    "time" : datetime.now(UTC).isoformat(),
-                    "userID" : message.author.id,
-                })
+                await handleBannedImage(message, imageSHA256)
 
                 if globals.configDict["SaveImages"] and imageManager.getSaveLevel() >= globals.ImageSaveModes.SHA:
                     imageManager.saveImage(imageBytes)
@@ -286,28 +288,20 @@ async def on_message(message):
                     sha256Result = resultData["sha256"]
 
                     embeddingMatch =  embScoreResult >= globals.configDict["EmbeddingThreshold"]
-                    if embeddingMatch:
-                        logger.info(f"Embedding search has found a high probability match with score: {embScoreResult}\nsha256:{sha256Result}")
-                        timeoutResult = await timeoutUser(message.author)
+                    if not embeddingMatch:
+                        continue
 
-                        embed = buildImageEmbed(message, globals.EmbedPostType.IMG_BAN_EMB, timeoutResult = timeoutResult, shaEmbedScore = str(embScoreResult))
+                    logger.info(f"Embedding search has found a high probability match with score: {embScoreResult}\nsha256:{sha256Result}")
+                    timeoutResult = await timeoutUser(message.author)
 
-                        confirmButtonView = BanUserView(authorUsername)
-                        msgID = await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, embed=embed, view=confirmButtonView)
-                        await message.delete()
+                    await handleBannedImage(message, embScoreResult)
 
-                        pendingDatabaseManager.submitPending(Tables.BANS, {
-                            "msgID" : msgID,
-                            "time" : datetime.now(UTC).isoformat(),
-                            "userID" : message.author.id,
-                        })
+                    if globals.configDict["SaveImages"] and imageManager.getSaveLevel() >= globals.ImageSaveModes.EMBBED:
+                        imageManager.saveImage(imageBytes, imageSHA256=imageSHA256, imageEmbedd=imageEmb)
 
-                        if globals.configDict["SaveImages"] and imageManager.getSaveLevel() >= globals.ImageSaveModes.EMBBED:
-                            imageManager.saveImage(imageBytes, imageSHA256=imageSHA256, imageEmbedd=imageEmb)
-
-                        foundMatch = True
-                        globals.perfManager.end("Image Scan")
-                        break
+                    foundMatch = True
+                    globals.perfManager.end("Image Scan")
+                    break
 
                 if foundMatch:
                     break
@@ -484,14 +478,6 @@ async def updateLoop(): # Auto saving and auto cleanup cycles.
         imageManager.cleanup()
 
     writeJson(globals.HITS_PATH, globals.hitTable)
-
-    #TODO remove once testing of TimedRotatingFileHandler has passed.
-    #if hasDaysPassed(loggerTimer):
-    #    logger.info("Re-init Logger...")
-    #    loggerTimer = datetime.now(UTC)
-    #    logger = initLogging()
-    #    globals.logger = logger
-    #    logger.info("Logger resumed...")
 
 try:
     client.run(globals.configDict["Token"])

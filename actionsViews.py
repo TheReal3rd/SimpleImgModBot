@@ -156,6 +156,7 @@ class ConfirmView(discord.ui.View):
                 userData: dict = self.args["badUserData"]
                 counter: int = 0 # Count how many successes.
                 channelID = interaction.channel.id
+                requiredRoleID: int = globals.configDict["RequiredRoleID"]
 
                 role: discord.role = None
 
@@ -167,7 +168,7 @@ class ConfirmView(discord.ui.View):
                         guild = await client.fetch_guild(globals.SERVER_ID)
 
                     if guild:
-                        role = guild.get_role(int(globals.configDict["RequiredRoleID"]))
+                        role = guild.get_role(requiredRoleID)
 
                     if not role:
                         await failureMessage(
@@ -197,8 +198,9 @@ class ConfirmView(discord.ui.View):
                                 logger.info(f"IN TEST MODE!!! Would have given {member.name} role {role.name}")
                                 continue
                             
-                            result = await member.add_role(role)
-                            
+                            await member.add_roles(role)
+                            result = hasRole(member, requiredRoleID) 
+  
                     if result:
                         counter += 1
 

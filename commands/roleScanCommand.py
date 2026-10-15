@@ -34,10 +34,7 @@ async def scanCommand(interaction: discord.Interaction, maxlimit: int = 0):
         if member.guild_permissions.administrator:
             continue
 
-        for role in member.roles:
-            if role.id == requiredRoleID:
-                badAccount = False
-                continue 
+        badAccount = not hasRole(member, requiredRoleID)
 
         if badAccount:
             badUserDict[member.id] = {
