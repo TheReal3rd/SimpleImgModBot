@@ -154,8 +154,8 @@ class ConfirmView(discord.ui.View):
 
                 action: str = self.args["action"]
                 userData: dict = self.args["badUserData"]
-                counter: int = 0 # Count how many successes.
-                channelID = interaction.channel.id
+                counter: int = 0
+                channelID: int = interaction.channel.id
                 requiredRoleID: int = globals.configDict["RequiredRoleID"]
 
                 role: discord.role = None
@@ -185,7 +185,6 @@ class ConfirmView(discord.ui.View):
                         continue
 
                     result: bool = False
-                    
                     match (action):
                         case "kick":
                             result = await kickUser(member, authorisedUser)

@@ -12,12 +12,6 @@ class PendingType(StrEnum):
     USER_BAN = "userBan"
     ROLE_USER_BAN = "roleUserBan"
 
-class ImageSaveModes(IntEnum):
-    BASIC = 0
-    SHA = 1
-    EMBBED = 2
-    ALL = 3
-
 class EmbedPostType(IntEnum):
     IMG_POST = 0
     IMG_BAN_SHA = 1
@@ -26,11 +20,6 @@ class EmbedPostType(IntEnum):
 #Const
 SERVER_ID: int = -1
 CHANNEL_ID: int = -1
-
-RESENFOR_ID: int = 332634195941654529
-REGIONAL_L: str = "\U0001F1F1"
-MAXIMUM_L: int = 30 # So im not constantly oblitarating him.
-
 THUMB_UP: str = "\U0001F44D"
 
 MSG_LEN_LIMIT: int = 2000
@@ -50,7 +39,7 @@ DEFAULT_CONFIG: dict = {
     "EmbeddingThreshold" : 0.87,
     "Debug" : False, # Disables Kick, Ban and image deletions for db calls used to test whether the operations reach them.
     "ClipProcessor" : "auto",
-    "JokesMemes" : True, # Adding this so if someone does use this they can disable my joke out of the bot. 
+    "JokesMemes" : True, # Adding this so if someone does use this they can disable my jokes out of the bot. 
     "RequiredRoleID" : "", #role id. Replace this with one for your server.
     "Twitch": {
         "Enabled" : False, # Force Enablement and Disablement.
@@ -64,13 +53,6 @@ DEFAULT_CONFIG: dict = {
     "PendingKeepDays" : 20, # The number of days maximum to keep pending bans and checks. 
     "MonthLogsCleanup" : 2, # The Duration for how long logs will be kept. In Months
     "SaveImages" : False, # Allows the bot to save the images. To allow the administrator to review images to add to the block list.
-    "SaveImageConfig" : {
-        # 0 - BASIC - Save images that aren't banned.
-        # 1 - SHA - Save images that got hit by SHA256 check.
-        # 2 - EMBBED- Save images that got hit by embbed check.
-        # 3 - ALL - Save Everything.
-        "SaveLevel": ImageSaveModes.ALL
-    }
 }
 
 ABT_MSG: list[str] = [
@@ -86,7 +68,7 @@ ABT_MSG: list[str] = [
 ]
 
 HITS_PATH: str = "hits.json" # Was only for Resenfor react but used to store other useful data.
-DEFAULT_HITTABLE: dict = {
+DEFAULT_HITTABLE: dict = { # WTF? TODO correct this config. To use camel casing?
     "Img_Scans" : 0,
     "Img_Bans" : 0,
     "BanCount" : 0,

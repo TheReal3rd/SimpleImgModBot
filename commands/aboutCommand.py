@@ -4,11 +4,15 @@ async def aboutCommand(interaction: discord.Interaction):
     if not await isInteractionAuthServer(interaction):
         return
 
+    emojiImage = discord.File(f"assets/aliceEmotes/{randint(1, 24)}.jpg", "image.jpg")
+    
     embed = discord.Embed (
         title = "About",
         description = "This bot is dedicated to stopping spam posting of unwanted and scam images.",
         color=discord.Color.red()
     )
+
+    embed.set_image(url="attachment://image.jpg")
 
     embed.add_field(
         name="DB Size's",
@@ -29,20 +33,14 @@ async def aboutCommand(interaction: discord.Interaction):
     )
 
     if globals.configDict["Debug"]:
-        embed.set_footer(text="In tested mode!!! Certain function will do nothing!")
+        embed.set_footer(text="In tested mode... Certain function will do nothing!")
     else:
         if globals.configDict["JokesMemes"]:
-            embed.add_field(
-                name="L's given to Resenfor",
-                value = f"Today: {resLHits}\nTotal: {hitTable["L_Res"]}",
-                inline = False
-            )
-
             embed.set_footer(text=choice(globals.ABT_MSG))
         else:
             embed.set_footer(text="Made by 3rd")
 
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(file=emojiImage, embed=embed)
     logger.info(f"{interaction.user.name} Has executed the about command.")
 
         

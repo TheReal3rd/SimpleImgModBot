@@ -9,7 +9,7 @@ from io import BytesIO
 from discord import app_commands
 from discord.ext import commands, tasks
 from datetime import datetime, timedelta, UTC
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 from twitchAPI.twitch import Twitch
 from twitchAPI.oauth import UserAuthenticationStorageHelper
@@ -55,14 +55,6 @@ writeJson(globals.CONFIG_PATH, globals.configDict)
 scanQueues: dict = {}
 resultQueues: dict = {}
 purgeQueues: dict = {}
-
-#Resenfor Hate :angy: :fist:
-hateTimer: datetime = datetime.now(UTC)
-resLHits: int = 0
-
-if globals.configDict["JokesMemes"]:
-    globals.DEFAULT_HITTABLE["L_Res"] = 0
-    globals.DEFAULT_HITTABLE["L_Halt"] = True
 
 globals.hitTable = readJson(globals.HITS_PATH, globals.DEFAULT_HITTABLE)
 
@@ -110,7 +102,7 @@ async def handle_channel_online(data: StreamOnlineEvent):
     channel_name = data.event.broadcaster_user_name
     stream_url = f'https://twitch.tv/{data.event.broadcaster_user_login}'
 
-    config = globals.configDict['Twitch'] # TODO update this to use int id's but as its being 
+    config = globals.configDict['Twitch'] # TODO update this to use int id's but as its not being used. Not in a rush. + Can't test it now.
     notifChannel: str = config['NotifChannel']
     notifRoleID: str = config['NotifRoleID']
     emojiNameID: str = config["NotifEmojiNameID"] # Server emojis have :name:id
@@ -217,21 +209,6 @@ async def registerCommands():
     client.tree.copy_global_to(guild=guild)
     await client.tree.sync(guild=guild)
 
-async def updateLowResL(message):
-    global resLHits, hateTimer
-    if globals.configDict["JokesMemes"]:
-        if resLHits < globals.MAXIMUM_L and globals.hitTable["L_Halt"]:
-            if message.author.id == globals.RESENFOR_ID:
-                await message.add_reaction(globals.REGIONAL_L)
-                resLHits += 1
-                globals.hitTable["L_Res"] += 1
-                if resLHits >= globals.MAXIMUM_L:
-                    hateTimer = datetime.now(UTC)
-        
-        if hasDaysPassed(hateTimer):
-            resLHits = 0
-            #globals.hitTable["L_Halt"] = True ## Hehehe. So boring.
-
 async def handleBannedImage(message: discord.Message, shaEmbedScore):
     timeoutResult = await timeoutUser(message.author)
 
@@ -251,8 +228,6 @@ async def handleBannedImage(message: discord.Message, shaEmbedScore):
 async def on_message(message):
     if message.author == client.user:
         return
-
-    await updateLowResL(message)
     
     authorUsername = message.author.name
 
@@ -271,9 +246,6 @@ async def on_message(message):
                 logger.info(f"Image matching with banned list of sha256: {imageSHA256}")
 
                 await handleBannedImage(message, imageSHA256)
-
-                if globals.configDict["SaveImages"] and imageManager.getSaveLevel() >= globals.ImageSaveModes.SHA:
-                    imageManager.saveImage(imageBytes)
 
                 foundMatch = True
                 globals.perfManager.end("Image Scan")
@@ -295,9 +267,6 @@ async def on_message(message):
                     timeoutResult = await timeoutUser(message.author)
 
                     await handleBannedImage(message, embScoreResult)
-
-                    if globals.configDict["SaveImages"] and imageManager.getSaveLevel() >= globals.ImageSaveModes.EMBBED:
-                        imageManager.saveImage(imageBytes, imageSHA256=imageSHA256, imageEmbedd=imageEmb)
 
                     foundMatch = True
                     globals.perfManager.end("Image Scan")
@@ -410,7 +379,7 @@ async def scanLoop(): # Manual scan command - commands.scanCommand
 
         msgListSize = len(scanQueues[key])
         if msgListSize <= 0:
-            msg =  f"Scan completed. {resultQueues[key]} violating images has been found and deleted."
+            msg = f"Scan completed. {resultQueues[key]} violating images has been found and deleted."
             logger.info(msg)
             await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, msg)
             toDelete.append(key)

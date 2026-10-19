@@ -4,7 +4,8 @@ if globals.configDict["SaveImages"]:
     @client.tree.command(name="savedimg", description="Manage and observe saved images.")
     @app_commands.describe(action="The action to be taken.")
     @app_commands.describe(imagesha="The image sha256 to view or delete.")
-    async def savedImgCommand(interaction: discord.Interaction, action: str = "", imagesha: str = ""):
+    @app_commands.describe(force="Force execute the selected operation.")
+    async def savedImgCommand(interaction: discord.Interaction, action: str = "", imagesha: str = "", force: bool = False):
         if not await isInteractionAuthorised(interaction):
             return
 
@@ -24,8 +25,9 @@ if globals.configDict["SaveImages"]:
                 name="Commands:",
                 value = f"""
                 view - View the saved image.
-                del - Del the image.
+                del - Delete the image.
                 list - Lists all images sha and date.
+                cleanup - Runs auto cleanup.
                 """,
                 inline = False
             )
@@ -53,7 +55,58 @@ if globals.configDict["SaveImages"]:
             await sendHelpEmbed()
             return
 
-        match(action):
+        match(action.lower()):
+            case "cv" | "collage" | "collageview":
+                """
+                TODO
+                1. Image collage frame.
+                2. Image scaling to collage template sizes.
+                3. Check if the image it 8mb or above. If above then linearly downscale until below or equal to 8mb.
+                4. send it with action view. Buttons numbered for each image in frame. max number of buttons?
+                5. Delete or handle the required action for the selected image.
+                6. be happy.
+                """
+                
+                imagesPaths = imageManager.getImageList()
+
+                if len(imagesPaths) <= 5:
+                    await interaction.response.send_message("Too few images saved to create a collage.")
+                    logger.info(f"{interaction.user.name} Has executed the savedimg command - Collage view was executed done nothing too few images.")
+                    return
+
+                largestPath = ""
+                largestImageSize = (-1, -1)
+                totalWidth = 0
+                totalHeight = 0 
+
+                for path in imagesPaths():
+                    with Image.open(path["path"]) as img:
+                        width, height = img.size
+                        
+                        if width > largestImageSize[0] and height > largestImageSize[1]:
+                            largestImageSize = (width, height)
+                            largestPath = path
+
+                        totalWidth += width
+                        totalHeight += height
+
+                avgWidth = totalWidth / len(imagesPaths)
+                avgHeight = totalHeight / len(imagesPaths)
+
+
+
+                testImage = Image.new("RGB", (1000, 1000), color = "black")
+                testDraw = ImageDraw.Draw(testImage)
+
+                testDraw.text((10, 10), "TEST", fill="white")
+
+                buffer = BytesIO()
+                testImage.save(buffer, format="PNG")
+                buffer.seek(0)
+
+                await interaction.response.send_message("Collage view WIP", file = discord.File(buffer, filename="collageView.png"))
+                logger.info(f"{interaction.user.name} Has executed the savedimg command - Collage view was executed...")
+            
             case "ls" | "list":
                 imageList = imageManager.getImageList()
                 if len(imageList) <= 0:
@@ -100,6 +153,13 @@ if globals.configDict["SaveImages"]:
 
                 await interaction.response.send_message("The requested image:", file=discord.File(imagePath[1]))
                 logger.info(f"{interaction.user.name} Has executed the savedimg command - Posted a image for view request.")
+            
+            case "cleanup" | "clean":
+                imageManager.cleanup(force)
+                
+                await interaction.response.send_message("A cleanup operation has been ran." if not force else "A force cleanup operation has been ran.")
+                logger.info(f"{interaction.user.name} Has executed the savedimg command - Cleanup command.")
+            
             case _:
                 await sendHelpEmbed()
 

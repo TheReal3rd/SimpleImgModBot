@@ -27,7 +27,7 @@ The bot will post when an image has been posted in the selected admin channel. W
 As of now the images for the db will be provided. They're scam sites do not follow them. Do not be fooled by them. I am not responsible for your own stupidity.
 
 ## Twitch Info
-
+> Warning this section has not been updated yet to use the newer config system. 
 Their is a Twitch streamer notification system within the bot written by Tintrex.
 The system isn't required to have the bot function but is provided for the specific use case of this bot.
 
