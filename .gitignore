@@ -8,6 +8,7 @@ notes.txt
 *.diff
 fetched_tokens.json
 working_images/*
+codeReviewLogs/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

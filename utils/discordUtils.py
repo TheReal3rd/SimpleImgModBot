@@ -1,4 +1,3 @@
-from sre_compile import dis
 import discord
 
 from discord import app_commands

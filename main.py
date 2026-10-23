@@ -105,9 +105,9 @@ async def handle_channel_online(data: StreamOnlineEvent):
     config = globals.configDict['Twitch'] # TODO update this to use int id's but as its not being used. Not in a rush. + Can't test it now.
     notifChannel: str = config['NotifChannel']
     notifRoleID: str = config['NotifRoleID']
-    emojiNameID: str = config["NotifEmojiNameID"] # Server emojis have :name:id
+    notifEmojiNameID: str = config["NotifEmojiNameID"] # Server emojis have :name:id
 
-    message = f'ATTTENTION <@&{notifRoleID}>, {channel_name} is live! Watch the stream here: {stream_url} <{emojiNameID}>'
+    message = f'ATTTENTION <@&{notifRoleID}>, {channel_name} is live! Watch the stream here: {stream_url} <{notifEmojiNameID}>'
     logger.info(f"Twitch API : Detected {channel_name} is live...")
     twitchPostDelay = datetime.now(UTC)
 
@@ -122,7 +122,7 @@ async def handle_channel_online(data: StreamOnlineEvent):
 
 def isTwitchConfigValid():
     for key, data in globals.configDict["Twitch"].items():
-        if data.trim() == "":
+        if data.strip() == "":
             return False
     return True
 
@@ -224,6 +224,9 @@ async def handleBannedImage(message: discord.Message, shaEmbedScore):
         "userID" : message.author.id,
     })
 
+#TODO Move the image processing to a thread queue.
+# + Add to config max thread count.
+# + Make the function fit within one page.
 @client.event
 async def on_message(message):
     if message.author == client.user:
@@ -264,7 +267,6 @@ async def on_message(message):
                         continue
 
                     logger.info(f"Embedding search has found a high probability match with score: {embScoreResult}\nsha256:{sha256Result}")
-                    timeoutResult = await timeoutUser(message.author)
 
                     await handleBannedImage(message, embScoreResult)
 
@@ -341,6 +343,7 @@ async def processAttachments(message, deletions: bool = True, moderation: bool =
 
                 if deletions:
                     await message.delete()
+
                 resultDict["violating"] = True
                 return resultDict
             else:
@@ -391,7 +394,7 @@ async def scanLoop(): # Manual scan command - commands.scanCommand
             resultDict = await processAttachments(message, True, True)
             if resultDict["violating"]:
                 resultQueues[key]+= 1
-            sleep(1)
+            asyncio.sleep(1) # Code Review 1-2
 
     if len(toDelete) != 0:
         for key in toDelete:
@@ -421,7 +424,7 @@ async def purgeLoop(): # purge loop - commands.purgemsgCommand
         for index in range(0, min(globals.SCAN_BATCH_SIZE, msgListSize)):
             message = purgeQueues[key].pop()
             await message.delete()
-            sleep(1)
+            asyncio.sleep(1) # Code Review 1-2
             if not key in resultQueues.keys():
                 resultQueues[key] = 1
             else:

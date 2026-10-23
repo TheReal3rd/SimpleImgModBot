@@ -18,7 +18,6 @@ class ImageManager():
         self.savePath = savePath
         dirCheck(savePath)
 
-        self.imgConfigDict = globals.configDict["SaveImageConfig"]
         self.pendingDataManager = globals.pendingDatabaseManager
 
         self.MAX_KEEP_DAYS = globals.configDict["PendingKeepDays"]
@@ -47,7 +46,7 @@ class ImageManager():
         for image in self.getImageList(True):
 
             if imageSHA256 in image["name"]:
-                logger.info(f"Image {filename} has been deleted.")
+                logger.info(f"Image {imageSHA256} has been deleted.")
                 os.remove(filePath)
                 return True
         return False
@@ -78,10 +77,11 @@ class ImageManager():
             nameSplit = image["name"].split("-")
             imageSHA256 = nameSplit.pop(3).replace(".png", "")
             if imageSHA256 == sha256:
-                return (filename, filePath)
+                return (image["name"], image["path"])
 
         return None
 
+""" I was on something with this one.... TODO TEST THEN REMOVE.
     def getImageList(self) -> dict:
         result = {}
         for image in self.getImageList(True):
@@ -93,6 +93,7 @@ class ImageManager():
             result[imageSHA256] = date
 
         return result
+"""
 
     def imageCount(self) -> int: # The more i stare the more i hate this. Is this truly faster? Would i ever bother to find out?
         return len(self.getImageList(False))
@@ -114,7 +115,7 @@ class ImageManager():
             }
 
             if stream:
-                yield tempDict #Finally found use for a yield. *Party poppers*
+                yield tempDict #Finally found use for yield. *Party poppers*
             else:
                 result.append(tempDict)
         

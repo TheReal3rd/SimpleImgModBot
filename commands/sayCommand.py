@@ -5,7 +5,7 @@ async def pardonCommand(interaction: discord.Interaction, say: str):#TODO add a 
     if not await isInteractionAuthorised(interaction):
         return
 
-    if not isinstance(say, str) and say.startswith("/"):
+    if say.startswith("/"):
         await interaction.response.send_message("I can't say that.")
         logger.warning(f"Attempted admin command called by: {interaction.user.name} Tried to say a blocked term or attempted to execute commands as a bot.")
         return

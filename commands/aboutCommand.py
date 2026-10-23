@@ -4,7 +4,7 @@ async def aboutCommand(interaction: discord.Interaction):
     if not await isInteractionAuthServer(interaction):
         return
 
-    emojiImage = discord.File(f"assets/aliceEmotes/{randint(1, 24)}.jpg", "image.jpg")
+    emojiImage = discord.File(f"assets/aliceEmotes/{randint(1, 23)}.jpg", "image.jpg")
     
     embed = discord.Embed (
         title = "About",

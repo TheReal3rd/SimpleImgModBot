@@ -16,7 +16,7 @@ async def scanCommand(interaction: discord.Interaction, scanrange: int):
 
     logger.info(f"History scan called by: {interaction.user.name} {msg}")
     responseMSG = await interaction.response.send_message(msg)
-
+    
     if responseMSG in scanQueues.keys():
         logger.warning("Scan already queued...")
         return

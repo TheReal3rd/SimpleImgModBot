@@ -291,7 +291,7 @@ class PendingDataManager():
     async def cleanup(self):
         for table in Tables:
             resultList = self.fetchAll(table)
-            if resultList == None and len(resultList) == 0:
+            if not resultList or len(resultList) == 0: # Code Review 1-5
                 continue
             
             toDelete = []
