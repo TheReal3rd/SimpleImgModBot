@@ -154,6 +154,9 @@ class FingerprintDataManager:
         """, (sha256,))
         self.conn.commit()
 
+        # Code review 1-6 Patch.
+        self.rebuildIndex()
+        
         return {
             "before" : dbSizeBefore,
             "after" : self.count()
