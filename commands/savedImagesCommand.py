@@ -39,14 +39,12 @@ if globals.configDict["SaveImages"]:
         async def validSHA(sha256):
             if sha256.strip() == "":
                 await interaction.response.send_message("The image argument is empty...")
-                logger.info(f"{interaction.user.name} Has executed the savedimg command - No arguments have been provided.")
+                logger.info(f"{interaction.user.name} Has executed the savedimg command - No SHA256 has been provided.")
                 return False
 
-            length = len(sha256)
-            shaLength = globals.SHA256_CHAR_LEN
-            if length < shaLength or length > shaLength:
+            if len(sha256) != globals.SHA256_CHAR_LEN:
                 await interaction.response.send_message("The provided SHA256 isn't upto expected length requirements.")
-                logger.info(f"{interaction.user.name} Has executed the savedimg command - No arguments have been provided.")
+                logger.info(f"{interaction.user.name} Has executed the savedimg command - Provided SHA256 doesn't meet length expectations.")
                 return False
 
             return True
@@ -79,7 +77,7 @@ if globals.configDict["SaveImages"]:
                 totalWidth = 0
                 totalHeight = 0 
 
-                for path in imagesPaths():
+                for path in imagesPaths:
                     with Image.open(path["path"]) as img:
                         width, height = img.size
                         
@@ -109,15 +107,18 @@ if globals.configDict["SaveImages"]:
             
             case "ls" | "list":
                 imageList = imageManager.getImageList()
-                if len(imageList) <= 0:
+                listLength = len(imageList)
+                if listLength <= 0:
                     await interaction.response.send_message("There are no images saved.")
                     logger.info(f"{interaction.user.name} Has executed the savedimg command - No images have been saved.")
                     return
 
-                listFormat = f"Total: {imageManager.imageCount()}.\n"
+                listFormat = f"Total: {listLength}.\n"
 
-                for key, value in imageList.items():
-                    listFormat += f"{value[0]}-{value[1]}-{value[1]}: {key}\n"
+                for image in imageList:
+                    date = image["date"]
+                    sha = image["sha"]
+                    listFormat += f"{date[0]}-{date[1]}-{date[2]}: {sha}\n"
 
                 if len(listFormat) >= globals.EMBED_LEN_LIMIT:
                     await interaction.response.send_message("The response would be too big...")
@@ -136,9 +137,13 @@ if globals.configDict["SaveImages"]:
                 if not await validSHA(imagesha):
                     return
 
-                imageManager.removeImage(imagesha)
-                await interaction.response.send_message("The requested image has been deleted.")
-                logger.info(f"{interaction.user.name} Has executed the savedimg command - Deleted the requested image: {imagesha}.")
+                result: bool = imageManager.removeImage(imagesha)
+                if result:
+                    await interaction.response.send_message("The requested image has been deleted.")
+                    logger.info(f"{interaction.user.name} Has executed the savedimg command - Deleted the requested image: {imagesha}.")
+                else:
+                    await interaction.response.send_message("Failed to delete the requested image.")
+                    logger.info(f"{interaction.user.name} Has executed the savedimg command - Failed to delete the requested image: {imagesha}.")
                
             case "view" | "inspect" | "v":
                 if not await validSHA(imagesha):
@@ -146,7 +151,7 @@ if globals.configDict["SaveImages"]:
 
                 imagePath = imageManager.getImage(imagesha)
 
-                if imagePath == None:
+                if not imagePath:
                     await interaction.response.send_message("The requested image does not exist in the storage.")
                     logger.info(f"{interaction.user.name} Has executed the savedimg command - Failed to find the requested image possible doesn't exist.")
                     return

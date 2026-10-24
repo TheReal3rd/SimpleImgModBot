@@ -39,3 +39,15 @@ To enable the functionality of the Twitch notify posting you must fill in the tw
 3. Start the bot again and check if the bot starts.
 
 > Note: Ensure you've installed all the requirements first.
+
+## Code Rules
+1. Strictly limited use of OOP style concepts. 
+2. Utilies heavy procedure and DOP styled coding.
+3. Heavy usage of List, Dictionaries and Tuples, Preferable Dictionaries for their strictly key to value association.
+4. Strictly use Classes for Enum's and Manager interfaces.
+5. Procedures can be within sub files and utilities.
+6. Aim to keep variables explicitly declared to reduce bug or crashing related to incorrect value usage and conversion. Such as Discord id's. 
+7. Strictly stick to integer types. Minimise conversion much as possible when working with Discord id's.
+8. Avoid while looping without upper bound limits. Basically NASA style.
+9. Aim for single page Functions and or Enum cases.
+10. Camel casing. For personal preference of readability.

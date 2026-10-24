@@ -235,7 +235,7 @@ async def on_message(message):
     authorUsername = message.author.name
 
     for attachment in message.attachments:
-        globals.hitTable["Img_Scans"] += 1
+        globals.hitTable["ImgScans"] += 1
         globals.perfManager.begin("Image Scan")
         if attachment.content_type and attachment.content_type.startswith("image/"):
             imageBytes = await attachment.read()
@@ -350,7 +350,6 @@ async def processAttachments(message, deletions: bool = True, moderation: bool =
                 imageEmb = calcEmbedding(imageBytes)
                 dbSearchResult = databaseManager.search(imageEmb, 8)
 
-                escapeLoop = False
                 for resultData in dbSearchResult:
                     embScoreResult = resultData["score"]
                     sha256Result = resultData["sha256"]
@@ -382,7 +381,7 @@ async def scanLoop(): # Manual scan command - commands.scanCommand
 
         msgListSize = len(scanQueues[key])
         if msgListSize <= 0:
-            msg = f"Scan completed. {resultQueues[key]} violating images has been found and deleted."
+            msg = f"Scan completed. {resultQueues[key]} violating images have been found and deleted."
             logger.info(msg)
             await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, msg)
             toDelete.append(key)
@@ -394,7 +393,7 @@ async def scanLoop(): # Manual scan command - commands.scanCommand
             resultDict = await processAttachments(message, True, True)
             if resultDict["violating"]:
                 resultQueues[key]+= 1
-            asyncio.sleep(1) # Code Review 1-2
+            await asyncio.sleep(1) # Code Review 1-2
 
     if len(toDelete) != 0:
         for key in toDelete:
@@ -404,7 +403,7 @@ async def scanLoop(): # Manual scan command - commands.scanCommand
     if finished:
         logger.info("Scanner loop stopping...")
         scanLoop.stop()
-    globals.perfManager.end("Update Loop")
+    globals.perfManager.end("Scan Loop")
 
 @tasks.loop(seconds=10)
 async def purgeLoop(): # purge loop - commands.purgemsgCommand
@@ -424,7 +423,7 @@ async def purgeLoop(): # purge loop - commands.purgemsgCommand
         for index in range(0, min(globals.SCAN_BATCH_SIZE, msgListSize)):
             message = purgeQueues[key].pop()
             await message.delete()
-            asyncio.sleep(1) # Code Review 1-2
+            await asyncio.sleep(1) # Code Review 1-2
             if not key in resultQueues.keys():
                 resultQueues[key] = 1
             else:

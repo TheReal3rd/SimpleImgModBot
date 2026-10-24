@@ -22,15 +22,15 @@ class ImageManager():
 
         self.MAX_KEEP_DAYS = globals.configDict["PendingKeepDays"]
 
-    def exists(self, imageSHA256):
-        for image in self.getImageList(True):
+    def exists(self, imageSHA256) -> bool:
+        for image in self.getImageStream():
             if imageSHA256 in image["name"]:
                 return True
         return False
 
     # Do not add embbed
-    def saveImage(self, imageBytes, imageSHA256 = None) -> None:
-        if imageSHA256 == None:
+    def saveImage(self, imageBytes, imageSHA256:str = "") -> None:
+        if imageSHA256 == None or imageSHA256 == "":
             imageSHA256 = globals.calcSHA256Func(imageBytes)
 
         if self.exists(imageSHA256):
@@ -43,17 +43,17 @@ class ImageManager():
             f.write(imageBytes)
 
     def removeImage(self, imageSHA256) -> bool:
-        for image in self.getImageList(True):
+        for image in self.getImageStream():
 
             if imageSHA256 in image["name"]:
                 logger.info(f"Image {imageSHA256} has been deleted.")
-                os.remove(filePath)
+                os.remove(image["path"])
                 return True
         return False
 
     def cleanup(self, force=False) -> None:
         timeDateNow = datetime.now(UTC).strftime("%Y-%m-%d").split("-")
-        for image in self.getImageList(True):
+        for image in self.getImageStream():
             filename: str = image["name"]
             filePath: str = image["path"]
 
@@ -62,44 +62,35 @@ class ImageManager():
                 os.remove(filePath)
                 continue
 
-            nameSplit: list[str] = filename.split("-")
+            nameSplit: list[str] = filename.replace(".png", "").split("-")
             dayDiff: int = abs(int(nameSplit[2]) - int(timeDateNow[2]))
             monthDiff: int = abs(int(nameSplit[1]) - int(timeDateNow[1]))
+            yearDiff: int = abs(int(nameSplit[0]) - int(timeDateNow[0]))
 
-            totalDays: int = dayDiff + (monthDiff * 30)
+            totalDays: int = dayDiff + (monthDiff * 30) + (yearDiff * 365)
             if totalDays >= self.MAX_KEEP_DAYS:
                 logger.info(f"Image cleanup {filename} has been deleted kept for {totalDays}.")
                 os.remove(filePath)
 
-    def getImage(self, sha256: str):
-        for image in self.getImageList(True):
+    def getImage(self, sha256: str) -> tuple:
+        for image in self.getImageStream():
 
             nameSplit = image["name"].split("-")
+
+            if len(nameSplit) != 3:
+                logger.warning(f"Abnormal file name structure of {image["name"]}. Unable to parse.")
+                continue
+
             imageSHA256 = nameSplit.pop(3).replace(".png", "")
             if imageSHA256 == sha256:
                 return (image["name"], image["path"])
 
-        return None
+        return ()
 
-""" I was on something with this one.... TODO TEST THEN REMOVE.
-    def getImageList(self) -> dict:
-        result = {}
-        for image in self.getImageList(True):
+    def imageCount(self) -> int:
+        return len(self.getImageList())
 
-            nameSplit = image["name"].split("-")
-            imageSHA256 = nameSplit.pop(3).replace(".png", "")
-            date = nameSplit
-
-            result[imageSHA256] = date
-
-        return result
-"""
-
-    def imageCount(self) -> int: # The more i stare the more i hate this. Is this truly faster? Would i ever bother to find out?
-        return len(self.getImageList(False))
-
-    def getImageList(self, stream=False):
-        result = []
+    def getImageStream(self) -> dict:
         for filename in os.listdir(self.savePath):
             filePath = os.path.join(self.savePath, filename)
 
@@ -109,18 +100,24 @@ class ImageManager():
             if not filename.endswith(".png"):
                 continue
 
+            nameSplit = filename.split("-")
+            imageSHA256 = nameSplit.pop(3).replace(".png", "")
+            date = nameSplit
+
             tempDict = {
                 "name" : filename,
                 "path" : filePath,
+                "sha" : imageSHA256,
+                "date" : date,
             }
 
-            if stream:
-                yield tempDict #Finally found use for yield. *Party poppers*
-            else:
-                result.append(tempDict)
-        
-        if not stream:
-            return result
+            yield tempDict #Finally found use for yield. *Party poppers*
+  
+    def getImageList(self) -> list:
+        result = []
+        for img in self.getImageStream(): 
+            result.append(img)
+        return result
 
 
     

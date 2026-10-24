@@ -64,13 +64,13 @@ ABT_MSG: list[str] = [
     "Resenfor is sometimes cute.",
     "E",
     "3.1415926535",
-    "Beep Boop..."
+    "Beep Boop...",
 ]
 
 HITS_PATH: str = "hits.json" # Was only for Resenfor react but used to store other useful data.
-DEFAULT_HITTABLE: dict = { # WTF? TODO correct this config. To use camel casing?
-    "Img_Scans" : 0,
-    "Img_Bans" : 0,
+DEFAULT_HITTABLE: dict = {
+    "ImgScans" : 0,
+    "ImgBans" : 0,
     "BanCount" : 0,
 }
 
