@@ -10,6 +10,7 @@ from discord import app_commands
 from discord.ext import commands, tasks
 from datetime import datetime, timedelta, UTC
 from PIL import Image, ImageDraw, ImageFont
+#from concurrent.futures import ThreadPoolExecutor
 
 from twitchAPI.twitch import Twitch
 from twitchAPI.oauth import UserAuthenticationStorageHelper
@@ -94,6 +95,10 @@ globals.SERVER_ID = int(globals.configDict["ServerID"])
 globals.CHANNEL_ID = int(globals.configDict["ChannelID"])
 globals.configDict["RequiredRoleID"] = int(globals.configDict["RequiredRoleID"] or 0)
 
+#Async multi threading
+#_imageThreadPool = ThreadPoolExecutor(max_workers=4)
+
+#TODO move twitch online notify into a manager / module.
 async def handle_channel_online(data: StreamOnlineEvent):
     global twitchPostDelay
     if not datetime.now(UTC) >= twitchPostDelay + timedelta(hours=1):
@@ -198,7 +203,7 @@ async def on_ready():
 
     await twitchEventSub.listen_stream_online(user.id, handle_channel_online)
 
-async def registerCommands():
+async def registerCommands() -> None:
     commandFiles = getFiles("commands", "py")
     for file in commandFiles:
         with open(file, "r") as f:
@@ -210,7 +215,7 @@ async def registerCommands():
     client.tree.copy_global_to(guild=guild)
     await client.tree.sync(guild=guild)
 
-async def handleBannedImage(message: discord.Message, shaEmbedScore):
+async def handleBannedImage(message: discord.Message, shaEmbedScore) -> None:
     timeoutResult = await timeoutUser(message.author)
 
     embed = buildImageEmbed(message, globals.EmbedPostType.IMG_BAN_SHA, timeoutResult = timeoutResult, shaEmbedScore = str(shaEmbedScore))
@@ -225,7 +230,7 @@ async def handleBannedImage(message: discord.Message, shaEmbedScore):
         "userID" : message.author.id,
     })
 
-async def handleImagePost(message: discord.message, imageSHA256:str, imageEmb, imageBytes:bytes):
+async def handleImagePost(message: discord.message, imageSHA256:str, imageEmb, imageBytes:bytes) -> None:
     logger.info(f"Image has been posted in {message.channel.name} by {message.author.name} sha256: {imageSHA256}")
 
     embed = buildImageEmbed(message, globals.EmbedPostType.IMG_POST, shaEmbedScore = str(imageSHA256))
@@ -245,9 +250,8 @@ async def handleImagePost(message: discord.message, imageSHA256:str, imageEmb, i
     if globals.configDict["SaveImages"]:
         imageManager.saveImage(imageBytes, imageSHA256=imageSHA256)
 
-#TODO Move the image processing to a thread queue.
+#TODO Move the image processing to a thread queue. Hmm harder then i thought... SQL DB need to be configured to handle multi threading...
 # + Add to config max thread count.
-# + Make the function fit within one page.
 @client.event
 async def on_message(message):
     if message.author == client.user:
@@ -256,50 +260,49 @@ async def on_message(message):
     for attachment in message.attachments:
         globals.hitTable["ImgScans"] += 1
         globals.perfManager.begin("Image Scan")
-        if attachment.content_type and attachment.content_type.startswith("image/"):
-            imageBytes = await attachment.read()
+        if not (attachment.content_type and attachment.content_type.startswith("image/")):
+            continue
             
-            imageSHA256 = calcSHA256(imageBytes)
-            dbFetchSHA = databaseManager.get(imageSHA256)
+        imageBytes = await attachment.read()
+        imageSHA256 = calcSHA256(imageBytes)
+        dbFetchSHA = databaseManager.get(imageSHA256)
 
-            foundMatch = False
-            logger.info(f"Image posted: {message.channel} | sha256: {imageSHA256}")
-            if dbFetchSHA != None and dbFetchSHA["sha256"] == imageSHA256:
-                logger.info(f"Image matching with banned list of sha256: {imageSHA256}")
+        foundMatch = False
+        logger.info(f"Image posted: {message.channel} | sha256: {imageSHA256}")
+        if dbFetchSHA != None and dbFetchSHA["sha256"] == imageSHA256:
+            logger.info(f"Image matching with banned list of sha256: {imageSHA256}")
 
-                await handleBannedImage(message, imageSHA256)
+            await handleBannedImage(message, imageSHA256)
 
-                foundMatch = True
-                globals.perfManager.end("Image Scan")
-                break
-            else:
-                logger.info(f"Embedding search into database...")
-                imageEmb = calcEmbedding(imageBytes)
-                dbSearchResult = databaseManager.search(imageEmb, 8)
-                
-                for resultData in dbSearchResult:
-                    embScoreResult = resultData["score"]
-                    sha256Result = resultData["sha256"]
+            foundMatch = True
+            globals.perfManager.end("Image Scan")
+            break
+        
+        logger.info(f"Embedding search into database...")
+        imageEmb = calcEmbedding(imageBytes)
+        dbSearchResult = databaseManager.search(imageEmb, 8)
+        for resultData in dbSearchResult:
+            embScoreResult = resultData["score"]
+            sha256Result = resultData["sha256"]
 
-                    embeddingMatch =  embScoreResult >= globals.configDict["EmbeddingThreshold"]
-                    if not embeddingMatch:
-                        continue
+            embeddingMatch =  embScoreResult >= globals.configDict["EmbeddingThreshold"]
+            if not embeddingMatch:
+                continue
 
-                    logger.info(f"Embedding search has found a high probability match with score: {embScoreResult}\nsha256:{sha256Result}")
+            logger.info(f"Embedding search has found a high probability match with score: {embScoreResult}\nsha256:{sha256Result}")
+            await handleBannedImage(message, embScoreResult)
 
-                    await handleBannedImage(message, embScoreResult)
+            foundMatch = True
+            globals.perfManager.end("Image Scan")
+            break
 
-                    foundMatch = True
-                    globals.perfManager.end("Image Scan")
-                    break
-
-                if foundMatch:
-                    break
+        if foundMatch:
+            break
             
-            # Handling the notify of none finger printed images. So not currently banned images.
-            if not foundMatch:
-                await handleImagePost(message, imageSHA256, imageEmb, imageBytes)
-                globals.perfManager.end("Image Scan")
+        # Handling the notify of none finger printed images. So not currently banned images.
+        if not foundMatch:
+            await handleImagePost(message, imageSHA256, imageEmb, imageBytes)
+            globals.perfManager.end("Image Scan")
 
 #Combined the functionality into actionView.py This is now the main section.
 @client.event
@@ -332,39 +335,40 @@ async def processAttachments(message, deletions: bool = True, moderation: bool =
     } 
 
     for attachment in message.attachments:
-        if attachment.content_type and attachment.content_type.startswith("image/"):
-            imageBytes = await attachment.read()
+        if not (attachment.content_type and attachment.content_type.startswith("image/")):
+            continue
+        
+        imageBytes = await attachment.read()
                     
-            imageSHA256 = calcSHA256(imageBytes)
-            dbFetchSHA = databaseManager.get(imageSHA256)
+        imageSHA256 = calcSHA256(imageBytes)
+        dbFetchSHA = databaseManager.get(imageSHA256)
 
-            if dbFetchSHA != None and dbFetchSHA["sha256"] == imageSHA256:
+        if dbFetchSHA != None and dbFetchSHA["sha256"] == imageSHA256:
+            if moderation:
+                resultDict["timeOutResult"] = await timeoutUser(message.author)
+
+            if deletions:
+                await message.delete()
+
+            resultDict["violating"] = True
+            return resultDict
+    
+        imageEmb = calcEmbedding(imageBytes)
+        dbSearchResult = databaseManager.search(imageEmb, 8)
+
+        for resultData in dbSearchResult:
+            embScoreResult = resultData["score"]
+            sha256Result = resultData["sha256"]
+
+            if embScoreResult >= globals.configDict["EmbeddingThreshold"]:
                 if moderation:
                     resultDict["timeOutResult"] = await timeoutUser(message.author)
 
                 if deletions:
                     await message.delete()
-
+              
                 resultDict["violating"] = True
                 return resultDict
-            else:
-                imageEmb = calcEmbedding(imageBytes)
-                dbSearchResult = databaseManager.search(imageEmb, 8)
-
-                for resultData in dbSearchResult:
-                    embScoreResult = resultData["score"]
-                    sha256Result = resultData["sha256"]
-
-                    embeddingMatch =  embScoreResult >= globals.configDict["EmbeddingThreshold"]
-                    if embeddingMatch:
-                        if moderation:
-                            resultDict["timeOutResult"] = await timeoutUser(message.author)
-
-                        if deletions:
-                            await message.delete()
-              
-                        resultDict["violating"] = True
-                        return resultDict
 
     return resultDict
 
