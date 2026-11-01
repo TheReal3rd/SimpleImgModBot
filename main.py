@@ -90,8 +90,9 @@ if globals.configDict["SaveImages"]:
     globals.imageManager = imageManager
 
 #General Const's
-globals.SERVER_ID = globals.configDict["ServerID"]
-globals.CHANNEL_ID = globals.configDict["ChannelID"]
+globals.SERVER_ID = int(globals.configDict["ServerID"])
+globals.CHANNEL_ID = int(globals.configDict["ChannelID"])
+globals.configDict["RequiredRoleID"] = int(globals.configDict["RequiredRoleID"] or 0)
 
 async def handle_channel_online(data: StreamOnlineEvent):
     global twitchPostDelay
@@ -202,7 +203,7 @@ async def registerCommands():
     for file in commandFiles:
         with open(file, "r") as f:
             code = f.read()
-            exec(code)
+            exec(code) # TODO consider scanner? But pointless... As if someone throws code in here to comp u... Means ur're already comp.. so... ur fucked either way. rofl.
             logger.info(f"Command loaded: {file}")
 
     guild = discord.Object(id=globals.SERVER_ID)
@@ -224,6 +225,26 @@ async def handleBannedImage(message: discord.Message, shaEmbedScore):
         "userID" : message.author.id,
     })
 
+async def handleImagePost(message: discord.message, imageSHA256:str, imageEmb, imageBytes:bytes):
+    logger.info(f"Image has been posted in {message.channel.name} by {message.author.name} sha256: {imageSHA256}")
+
+    embed = buildImageEmbed(message, globals.EmbedPostType.IMG_POST, shaEmbedScore = str(imageSHA256))
+
+    confirmButtonView = BanImageView()
+    msgID = await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, embed = embed, view = confirmButtonView)
+
+    pendingDatabaseManager.submitPending(Tables.CHECKS, {
+        "msgID" : msgID,
+        "sha256" : imageSHA256,
+        "embedding" : imageEmb,
+        "time" : datetime.now(UTC).isoformat(),
+        "messageID" : message.id,
+        "channelID" : message.channel.id,
+        "userID" : message.author.id,
+    })
+    if globals.configDict["SaveImages"]:
+        imageManager.saveImage(imageBytes, imageSHA256=imageSHA256)
+
 #TODO Move the image processing to a thread queue.
 # + Add to config max thread count.
 # + Make the function fit within one page.
@@ -232,8 +253,6 @@ async def on_message(message):
     if message.author == client.user:
         return
     
-    authorUsername = message.author.name
-
     for attachment in message.attachments:
         globals.hitTable["ImgScans"] += 1
         globals.perfManager.begin("Image Scan")
@@ -279,25 +298,7 @@ async def on_message(message):
             
             # Handling the notify of none finger printed images. So not currently banned images.
             if not foundMatch:
-                logger.info(f"Image has been posted in {message.channel.name} by {authorUsername} sha256: {imageSHA256}")
-
-                embed = buildImageEmbed(message, globals.EmbedPostType.IMG_POST, shaEmbedScore = str(imageSHA256))
-
-                confirmButtonView = BanImageView()
-                msgID = await sendMessage(globals.SERVER_ID, globals.CHANNEL_ID, embed = embed, view = confirmButtonView)
-
-                pendingDatabaseManager.submitPending(Tables.CHECKS, {
-                    "msgID" : msgID,
-                    "sha256" : imageSHA256,
-                    "embedding" : imageEmb,
-                    "time" : datetime.now(UTC).isoformat(),
-                    "messageID" : message.id,
-                    "channelID" : message.channel.id,
-                    "userID" : message.author.id,
-                })
-                if globals.configDict["SaveImages"]:
-                    imageManager.saveImage(imageBytes, imageSHA256=imageSHA256)
-
+                await handleImagePost(message, imageSHA256, imageEmb, imageBytes)
                 globals.perfManager.end("Image Scan")
 
 #Combined the functionality into actionView.py This is now the main section.

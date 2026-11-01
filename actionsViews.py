@@ -83,7 +83,7 @@ class ConfirmView(discord.ui.View):
                     return
 
                 result = globals.pendingDatabaseManager.get("checks", messageID)
-                if result == None: 
+                if result: 
                     await failureMessage(
                         loggerMSG=f"Attempted image ban by {authorisedUser}", 
                         responseMSG="Failed to find the image ban request in pending database.", 

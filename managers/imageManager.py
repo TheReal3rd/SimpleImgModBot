@@ -34,7 +34,7 @@ class ImageManager():
             imageSHA256 = globals.calcSHA256Func(imageBytes)
 
         if self.exists(imageSHA256):
-            logger.info("SHA256 - Image is already saved.")
+            logger.info("SHA256 - Image has already been saved.")
             return
 
         # Image Nameing date_imagesha.png
@@ -75,13 +75,12 @@ class ImageManager():
     def getImage(self, sha256: str) -> tuple:
         for image in self.getImageStream():
 
-            nameSplit = image["name"].split("-")
-
-            if len(nameSplit) != 3:
+            nameSplit: list = image["name"].split("-")
+            if len(nameSplit) != 4:
                 logger.warning(f"Abnormal file name structure of {image["name"]}. Unable to parse.")
                 continue
 
-            imageSHA256 = nameSplit.pop(3).replace(".png", "")
+            imageSHA256:str = nameSplit.pop(3).replace(".png", "")
             if imageSHA256 == sha256:
                 return (image["name"], image["path"])
 
@@ -100,9 +99,9 @@ class ImageManager():
             if not filename.endswith(".png"):
                 continue
 
-            nameSplit = filename.split("-")
-            imageSHA256 = nameSplit.pop(3).replace(".png", "")
-            date = nameSplit
+            nameSplit: list = filename.split("-")
+            imageSHA256:str = nameSplit.pop(3).replace(".png", "")
+            date:list = nameSplit
 
             tempDict = {
                 "name" : filename,

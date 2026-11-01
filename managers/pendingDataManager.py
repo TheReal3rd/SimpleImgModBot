@@ -13,6 +13,8 @@ class Tables(StrEnum):
     CHECKS = "checks"
     BANS = "bans"
 
+#TODO decide to stick with a string or enum only for table selection. Currently all function treat table as a string.
+
 class PendingDataManager():
 
     def __init__(self, db_path: str = "pending.db"):
@@ -50,17 +52,17 @@ class PendingDataManager():
     def _deserialize_embedding(blob: bytes) -> np.ndarray:
         return np.frombuffer(blob, dtype=np.float32)
 
-    def tableIdentify(self, table):
+    def tableIdentify(self, table) -> str:
         if isinstance(table, Tables):
             return table.name.lower()
         elif isinstance(table, str):
             return table.lower()
         else:
-            return None
+            return ""
 
-    def exists(self, table, msgID) -> bool:
-        selectedTable = self.tableIdentify(table)
-        if selectedTable == None:
+    def exists(self, table, msgID: int) -> bool:
+        selectedTable: str = self.tableIdentify(table)
+        if not selectedTable:
             return False
 
         self.cursor.execute(
@@ -69,9 +71,9 @@ class PendingDataManager():
         )
         return self.cursor.fetchone() is not None
 
-    def submitPending(self, table, dataDict):
+    def submitPending(self, table, dataDict: dict) -> bool:
         selectedTable = self.tableIdentify(table)
-        if selectedTable == None:
+        if not selectedTable:
             return False
 
         msgID = dataDict["msgID"]
@@ -128,10 +130,10 @@ class PendingDataManager():
         self.conn.commit()
         return True
 
-    def get(self, table, msgID: str):
+    def get(self, table, msgID: str) -> dict:
         selectedTable = self.tableIdentify(table)
-        if selectedTable == None:
-            return None
+        if not selectedTable:
+            return {}
 
         match(selectedTable):
             case "checks":
@@ -151,7 +153,7 @@ class PendingDataManager():
                 row = self.cursor.fetchone()
 
                 if row is None:
-                    return None
+                    return {}
 
                 return {
                     "msgID": row[0],
@@ -175,7 +177,7 @@ class PendingDataManager():
                 row = self.cursor.fetchone()
 
                 if row is None:
-                    return None
+                    return {}
 
                 return {
                     "msgID": row[0],
@@ -186,7 +188,7 @@ class PendingDataManager():
 
     def count(self, table) -> int:
         selectedTable = self.tableIdentify(table)
-        if selectedTable == None:
+        if not selectedTable:
             return -1
 
         self.cursor.execute(
@@ -195,10 +197,10 @@ class PendingDataManager():
         return self.cursor.fetchone()[0]
 
 
-    def fetchAll(self, table):
+    def fetchAll(self, table) -> list:
         selectedTable = self.tableIdentify(table)
-        if selectedTable == None:
-            return None
+        if not selectedTable:
+            return []
 
         match(selectedTable):
             case "checks":
@@ -247,11 +249,11 @@ class PendingDataManager():
                     }
                     for row in rows
                 ]
-        return None
+        return []
 
-    def deleteEntry(self, table, msgID:str):
+    def deleteEntry(self, table, msgID:str) -> dict:
         selectedTable = self.tableIdentify(table)
-        if selectedTable == None:
+        if not selectedTable:
             return None
 
         dbSizeBefore = self.count(table)
@@ -266,9 +268,9 @@ class PendingDataManager():
             "after" : self.count(table)
         }
 
-    def deleteTable(self, table):
+    def deleteTable(self, table) -> bool:
         selectedTable = self.tableIdentify(table)
-        if selectedTable == None:
+        if not selectedTable:
             return False
 
         self.cursor.execute(f"""
@@ -279,16 +281,16 @@ class PendingDataManager():
         self.cursor.execute("VACUUM;")
         return True
 
-    def close(self):
+    def close(self) -> None:
         self.conn.close()
 
-    def __len__(self):
+    def __len__(self) -> int:
         total = 0
         for table in Tables:
             total += self.count(table)
         return total
 
-    async def cleanup(self):
+    async def cleanup(self) -> None:
         for table in Tables:
             resultList = self.fetchAll(table)
             if not resultList or len(resultList) == 0: # Code Review 1-5

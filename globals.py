@@ -47,8 +47,8 @@ DEFAULT_CONFIG: dict = {
         "TokenCache": "", # filepath to a json file containing the OAuth tokens
         "AppId": "",  # Twitch App ID.
         "AppSecret": "",  # Twitch App Secret
-        "NotifChannel": "",  # Discord channel ID you want the bot to send the notifications on
-        "NotifRole": ""  # Role you want the bot to ping. Do not include the '@'
+        "NotifChannel": 0,  # Discord channel ID you want the bot to send the notifications on
+        "NotifRole": 0  # Role you want the bot to ping. Do not include the '@'
     },
     "PendingKeepDays" : 20, # The number of days maximum to keep pending bans and checks. 
     "MonthLogsCleanup" : 2, # The Duration for how long logs will be kept. In Months

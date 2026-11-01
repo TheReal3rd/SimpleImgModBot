@@ -64,7 +64,7 @@ class FingerprintDataManager:
 
         return True
 
-    def get(self, sha256: str):
+    def get(self, sha256: str) -> dict:
         self.cursor.execute("""
         SELECT
             sha256,
@@ -89,7 +89,7 @@ class FingerprintDataManager:
         )
         return self.cursor.fetchone()[0]
 
-    def fetchAll(self):
+    def fetchAll(self) -> list:
         self.cursor.execute("""
         SELECT
             sha256,
